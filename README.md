@@ -23,6 +23,20 @@ res <- myepi::cox_run(
 )
 ```
 
+**结果示例**
+
+| group   | level | g_levels | case_total | incidence | hr   | hr_lower | hr_upper | beta | se   | p     |
+|---------|-------|----------|-------------|-----------|------|----------|----------|------|------|-------|
+| smoke   | Yes   | All      | 123/1000    | 245.78    | 1.75 | 1.30     | 2.35     | 0.56 | 0.15 | 0.001 |
+| smoke   | No    | All      | 80/1500     | 125.60    | 1.00 | Ref      | Ref      | Ref  | Ref  | Ref   |
+| pm2.5   | High  | All      | 95/1100     | 215.00    | 1.60 | 1.20     | 2.10     | 0.47 | 0.14 | 0.002 |
+| pm2.5   | Low   | All      | 60/1400     | 85.50     | 1.00 | Ref      | Ref      | Ref  | Ref  | Ref   |
+| sex     | Male  | All      | 140/1300    | 275.00    | 1.45 | 1.10     | 1.90     | 0.37 | 0.13 | 0.005 |
+| sex     | Female| All      | 63/1200     | 115.00    | 1.00 | Ref      | Ref      | Ref  | Ref  | Ref   |
+
+
+---
+
 ### 2. `forestplot()`: 高质量、灵活可调的森林图绘制工具
 
 - **多列信息展示**：支持左右两侧添加任意自定义列（如变量名称、HR值、95%CI、P值等）。
@@ -40,4 +54,6 @@ myepi::forestplot(df = df,left_side_cols = c(1:4),
       p_value_col = 'P'
 )
 ```
+**结果示例**
+![x效果展示](temp.png)
 
