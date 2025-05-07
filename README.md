@@ -2,7 +2,11 @@
 
 **myepi** 是一个面向流行病学研究的数据分析辅助工具包，旨在简化队列研究中的回归建模与结果展示流程。该包集成了模型拟合与结果可视化的常用功能，特别适用于 Cox 比例风险模型分析与分组亚组研究。
 
-
+## Installation
+```R
+# 若希望直接更新该R包，则在未加载 FORESTPLOT.PAC 的基础上直接运行下方代码即可
+devtools::install_github("yuanlinm/myepi")
+library(myepi)
 
 
 ## 🔍 核心功能
