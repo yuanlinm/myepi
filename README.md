@@ -21,7 +21,8 @@ library(myepi)
 
 ```r
 res = myepi::cox_run(
-  data = data, time = 'LC_inci_difftime', event = 'LC_incidence', riskvar = 'age', covars =  c("age","sex"), groupvar = 'sex', ref = NULL
+  data = data, time = 'LC_inci_difftime', event = 'LC_incidence',
+  riskvar = 'age', covars =  c("age","sex"), groupvar = 'sex', ref = NULL
 )
 ```
 
