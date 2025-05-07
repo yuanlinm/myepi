@@ -1,0 +1,25 @@
+Package: myepi
+Title: Tools for Epidemiological Analysis
+Version: 0.0.0.9000
+Authors@R: 
+    person("Yuanlin", "Mou", email = "yuanlinm@qq.com", role = c("aut", "cre"))
+Description: A collection of tools for epidemiological data analysis, including 
+    functions for calculating incidence rates and relative risk. Designed for 
+    researchers and analysts in public health and epidemiology.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
+Depends: 
+    R (>= 4.0.0)
+Imports: 
+    dplyr,
+    tidyr,
+    ggplot2,
+    rlang,
+    stringr
+Suggests: 
+    testthat (>= 3.0.0),
+    knitr,
+    rmarkdown
+LazyData: TRUE
