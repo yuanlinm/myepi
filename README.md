@@ -20,7 +20,7 @@ library(myepi)
 **示例用法**：
 
 ```r
-res = myepi::cox_run(
+myepi::cox_run(
   data = data, time = 'LC_inci_difftime', event = 'LC_incidence',
   riskvar = 'age', covars =  c("age","sex"), groupvar = 'sex', ref = NULL
 )
