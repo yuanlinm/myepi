@@ -10,7 +10,7 @@ library(myepi)
 ```
 
 ## Contents
-- [###1. `cox_run()`：一行代码完成 Cox 模型拟合与亚组分析](sa)
+- [###1. `cox_run()`：一行代码完成 Cox 模型拟合与亚组分析](### 1. `cox_run()`：一行代码完成 Cox 模型拟合与亚组分析)
 - [Method](#method)
 - [Results](#results)
 - [Conclusion](#conclusion)
