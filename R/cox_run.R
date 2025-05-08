@@ -52,6 +52,7 @@ cox_run = function(data, time, event, riskvar, covars, groupvar = NULL, ref = NU
       non_ref_levels <- levels_var[levels_var != levels(df[[riskvar]])[1]]
       
       df_out <- data.frame(
+        riskvar = riskvar,
         group = ifelse(is.null(groupvar), riskvar, groupvar),
         g_levels = subgroup,
         level = levels_var,
@@ -75,7 +76,7 @@ cox_run = function(data, time, event, riskvar, covars, groupvar = NULL, ref = NU
       
       df_out$case_total <- level_data$case_total
       df_out$incidence <- level_data$incidence
-      df_out = df_out |> select(group, level, g_levels,case_total, incidence, hr, hr_lower, hr_upper, beta, se, p)
+      df_out = df_out |> select(riskvar, group, level, g_levels,case_total, incidence, hr, hr_lower, hr_upper, beta, se, p)
       rownames(df_out) = NULL
       return(df_out)
       
@@ -85,6 +86,7 @@ cox_run = function(data, time, event, riskvar, covars, groupvar = NULL, ref = NU
       ci <- sm$conf.int[1, ]
       stat <- sm$coef[1, c("coef", "se(coef)", "Pr(>|z|)")]
       out <- data.frame(
+        riskvar = riskvar,
         group = ifelse(is.null(groupvar), riskvar, groupvar),
         g_levels = subgroup,
         level = "All",
@@ -97,7 +99,7 @@ cox_run = function(data, time, event, riskvar, covars, groupvar = NULL, ref = NU
         case_total = paste0(sum(df[[event]]), '/', nrow(df)),
         incidence = round((sum(df[[event]]) / sum(df[[time]] / 365.25)) * 1e5, 2)
       )
-      out = out |> select(group, level, g_levels,case_total, incidence, hr, hr_lower, hr_upper, beta, se, p)
+      out = out |> select(riskvar, group, level, g_levels,case_total, incidence, hr, hr_lower, hr_upper, beta, se, p)
       rownames(out) = NULL
       return(out)
     }
