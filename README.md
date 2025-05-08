@@ -10,9 +10,9 @@ library(myepi)
 ```
 
 ## Contents
-- [1. `cox_run`:   高效完成 Cox 模型拟合与亚组分析](#cox_run)
-- [2. `forestplot()`:   易用的森林图绘制工具](#forestplot)
-- [3. `getnas()`:   简洁的缺失值报告](#getnas)
+- [1. `cox_run`: 高效完成 Cox 模型拟合与亚组分析](#cox_run)
+- [2. `forestplot()`: 易用的森林图绘制工具](#forestplot)
+- [3. `getnas()`: 简洁的缺失值报告](#getnas)
 
 
 ## 核心功能
