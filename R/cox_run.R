@@ -55,7 +55,6 @@ cox_run = function(data, time, event, riskvar, covars, groupvar = NULL, ref = NU
         group = ifelse(is.null(groupvar), riskvar, groupvar),
         g_levels = subgroup,
         level = levels_var,
-        riskvar = riskvar, 
         hr = round(c(1, res[, "exp(coef)"]), 4),
         hr_lower = round(c(1, res[, "lower .95"]), 4),
         hr_upper = round(c(1, res[, "upper .95"]), 4),
@@ -76,7 +75,7 @@ cox_run = function(data, time, event, riskvar, covars, groupvar = NULL, ref = NU
       
       df_out$case_total <- level_data$case_total
       df_out$incidence <- level_data$incidence
-      df_out = df_out |> select(riskvar, level, group, g_levels, case_total, incidence, hr, hr_lower, hr_upper, beta, se, p)
+      df_out = df_out |> select(group, level, g_levels,case_total, incidence, hr, hr_lower, hr_upper, beta, se, p)
       rownames(df_out) = NULL
       return(df_out)
       
@@ -88,7 +87,6 @@ cox_run = function(data, time, event, riskvar, covars, groupvar = NULL, ref = NU
       out <- data.frame(
         group = ifelse(is.null(groupvar), riskvar, groupvar),
         g_levels = subgroup,
-        riskvar = riskvar,
         level = "All",
         hr = round(ci["exp(coef)"], 4),
         hr_lower = round(ci["lower .95"], 4),
@@ -99,7 +97,7 @@ cox_run = function(data, time, event, riskvar, covars, groupvar = NULL, ref = NU
         case_total = paste0(sum(df[[event]]), '/', nrow(df)),
         incidence = round((sum(df[[event]]) / sum(df[[time]] / 365.25)) * 1e5, 2)
       )
-      out = out |> select(riskvar, level, group, g_levels, case_total, incidence, hr, hr_lower, hr_upper, beta, se, p)
+      out = out |> select(group, level, g_levels,case_total, incidence, hr, hr_lower, hr_upper, beta, se, p)
       rownames(out) = NULL
       return(out)
     }
@@ -112,7 +110,6 @@ cox_run = function(data, time, event, riskvar, covars, groupvar = NULL, ref = NU
     data[[groupvar]] <- factor(data[[groupvar]])
     res <- lapply(levels(data[[groupvar]]), function(lv) {
       sub_data <- data[data[[groupvar]] == lv, ]
-      sub_data = droplevels(sub_data)
       run_model(sub_data, subgroup = lv)
     }) |> bind_rows()
     rownames(res) = NULL
