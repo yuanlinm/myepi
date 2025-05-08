@@ -10,9 +10,9 @@ library(myepi)
 ```
 
 ## Contents
-- [1. `cox_run`](#cox_run())
-- [2. `forestplot()`](#forestplot())
-- [3. `getnas()`](#getnas())
+- [1. `cox_run`](#cox_run)
+- [2. `forestplot()`](#forestplot)
+- [3. `getnas()`](#getnas)
 
 
 ## 核心功能
