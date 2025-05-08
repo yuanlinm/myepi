@@ -10,7 +10,7 @@ library(myepi)
 ```
 
 ## Contents
-- [1. cox_run](### `cox_run()`)
+- [1. cox_run](###`cox_run()`)
 - [Method](#method)
 - [Results](#results)
 - [Conclusion](#conclusion)
