@@ -9,6 +9,13 @@ devtools::install_github("yuanlinm/myepi")
 library(myepi)
 ```
 
+## Contents
+- [Introduction](#introduction)
+- [Method](#method)
+- [Results](#results)
+- [Conclusion](#conclusion)
+
+
 ## 核心功能
 
 ### 1. `cox_run()`：一行代码完成 Cox 模型拟合与亚组分析
