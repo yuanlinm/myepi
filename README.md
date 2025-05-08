@@ -74,3 +74,29 @@ myepi::forestplot(df = df,left_side_cols = c(1:4),
 **结果示例**
 ![x效果展示](temp.png)
 
+---
+
+
+### 3. `getnas()`: 高质量、灵活可调的森林图绘制工具
+
+- **功能**：快速按变量、类型和缺失率报告缺失值，并按缺失百分比排序。非常适合数据清理。
+
+**示例用法**：
+```r
+myepi::getnas(dat = data)
+```
+
+**结果示例**
+
+|Variable                  |Type        | Missing|MissingRate |
+|:-------------------------|:-----------|-------:|:-----------|
+|cancer_base_site          |Categorical |  315828|100%        |
+|aspirin                   |Categorical |  275700|87.29%      |
+|family_cancer             |Categorical |   12985|4.11%       |
+|siblings_can              |Categorical |    9854|3.12%       |
+|cough_sputum              |Categorical |    6702|2.12%       |
+|children_can              |Categorical |    4929|1.56%       |
+
+
+
+
