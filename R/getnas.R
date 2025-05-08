@@ -6,7 +6,7 @@
 #' @return A printed data frame combining group statistics (Variable，Type，Missing，MissingRate).
 
 #' @export
-report_missing <- function(dat) {
+getnas <- function(dat) {
     dat <- as.data.frame(dat)
     output <- list()
     n_total <- nrow(dat)

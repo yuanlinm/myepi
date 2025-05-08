@@ -2,7 +2,7 @@
 
 export(cox_run)
 export(forestplot)
-export(report_missing)
+export(getnas)
 importFrom(ggplot2,aes)
 importFrom(ggplot2,aes_string)
 importFrom(ggplot2,annotate)
