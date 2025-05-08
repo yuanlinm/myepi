@@ -10,9 +10,9 @@ library(myepi)
 ```
 
 ## Contents
-- [1. `cox_run`](#cox_run)
-- [2. `forestplot()`](#forestplot)
-- [3. `getnas()`](#getnas)
+- [1. `cox_run`: 高效完成 Cox 模型拟合与亚组分析](#cox_run)
+- [2. `forestplot()`: 易用的森林图绘制工具](#forestplot)
+- [3. `getnas()`: 简洁的缺失值报告](#getnas)
 
 
 ## 核心功能
@@ -89,7 +89,7 @@ myepi::forestplot(df = df,left_side_cols = c(1:4),
 
 ### `getnas()`
 
-> 缺失值报告
+> 简洁的缺失值报告
 
 - **功能**：快速按变量、类型和缺失率报告缺失值，并按缺失百分比排序。非常适合数据清理。
 
