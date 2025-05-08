@@ -4,10 +4,10 @@
 \alias{report_missing}
 \title{my NAs reporting func}
 \usage{
-report_missing(data)
+report_missing(dat)
 }
 \arguments{
-\item{data}{A data frame containing the grouping variable, event variable, and time variable.}
+\item{dat}{A data frame containing the grouping variable, event variable, and time variable.}
 }
 \value{
 A printed data frame combining group statistics (Variable，Type，Missing，MissingRate).

@@ -2,11 +2,11 @@
 #'
 #' report NAs as a ordered printed data frame
 #'
-#' @param data A data frame containing the grouping variable, event variable, and time variable.
+#' @param dat A data frame containing the grouping variable, event variable, and time variable.
 #' @return A printed data frame combining group statistics (Variable，Type，Missing，MissingRate).
 
 #' @export
-report_missing <- function(data) {
+report_missing <- function(dat) {
     dat <- as.data.frame(dat)
     output <- list()
     n_total <- nrow(dat)
