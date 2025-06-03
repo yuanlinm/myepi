@@ -50,6 +50,12 @@ cor_run <- function(df, vars) {
         # 连续-分类
         else if (t1 == "continuous" && t2 == "categorical") {
           y_factor <- as.factor(y_var)
+          # 检查每个水平的样本量
+          level_counts <- table(y_factor)
+          if (any(level_counts < 2)) {
+            return(tibble(p.value = NA, method = "ANOVA insufficient sample", correlation = NA, trend = "n/a"))
+          }
+          
           if (nlevels(y_factor) == 2) {
             # 二分类变量
             test <- tryCatch(t.test(x_var ~ y_factor), error = function(e) NULL)
@@ -98,18 +104,26 @@ cor_run <- function(df, vars) {
                 ss_total <- sum(aov_table[,"Sum Sq"], na.rm = TRUE)
                 eta_sq <- ss_between / ss_total
                 cor_val <- sqrt(eta_sq)
-                p_val <- tryCatch(tidy(aov_table)[1, "p.value", drop=TRUE], error = function(e) NA)
+                p_val <- tryCatch(aov_table$"Pr(>F)"[1], error = function(e) NA)
                 return(tibble(p.value = p_val, method = "ANOVA", correlation = cor_val, trend = trend_desc))
+              } else {
+                return(tibble(p.value = NA, method = "ANOVA table error", correlation = cor_val, trend = trend_desc))
               }
+            } else {
+              return(tibble(p.value = NA, method = "ANOVA fit error", correlation = cor_val, trend = trend_desc))
             }
-            
-            return(tibble(p.value = NA, method = "ANOVA error", correlation = cor_val, trend = trend_desc))
           }
         }
         # 分类-连续（交换变量顺序，调用连续-分类逻辑）
         else if (t1 == "categorical" && t2 == "continuous") {
           y_factor <- as.factor(x_var)
           x_cont <- y_var
+          # 检查每个水平的样本量
+          level_counts <- table(y_factor)
+          if (any(level_counts < 2)) {
+            return(tibble(p.value = NA, method = "ANOVA insufficient sample", correlation = NA, trend = "n/a"))
+          }
+          
           if (nlevels(y_factor) == 2) {
             test <- tryCatch(t.test(x_cont ~ y_factor), error = function(e) NULL)
             cor_val <- tryCatch(cor(x_cont, as.numeric(y_factor)), error = function(e) NA)
@@ -156,20 +170,27 @@ cor_run <- function(df, vars) {
                 ss_total <- sum(aov_table[,"Sum Sq"], na.rm = TRUE)
                 eta_sq <- ss_between / ss_total
                 cor_val <- sqrt(eta_sq)
-                p_val <- tryCatch(tidy(aov_table)[1, "p.value", drop=TRUE], error = function(e) NA)
+                p_val <- tryCatch(aov_table$"Pr(>F)"[1], error = function(e) NA)
                 return(tibble(p.value = p_val, method = "ANOVA", correlation = cor_val, trend = trend_desc))
+              } else {
+                return(tibble(p.value = NA, method = "ANOVA table error", correlation = cor_val, trend = trend_desc))
               }
+            } else {
+              return(tibble(p.value = NA, method = "ANOVA fit error", correlation = cor_val, trend = trend_desc))
             }
-            
-            return(tibble(p.value = NA, method = "ANOVA error", correlation = cor_val, trend = trend_desc))
           }
         }
         # 分类-分类
         else {
           x_factor <- as.factor(x_var)
           y_factor <- as.factor(y_var)
-          test <- tryCatch(chisq.test(table(x_factor, y_factor)), error = function(e) NULL)
-          cor_val <- tryCatch(cramerV(table(x_factor, y_factor)), error = function(e) NA)
+          # 检查卡方检验的样本量
+          tab <- table(x_factor, y_factor)
+          if (any(tab < 5)) {
+            warning("Chi-square test may be unreliable due to low expected frequencies.")
+          }
+          test <- tryCatch(chisq.test(tab), error = function(e) NULL)
+          cor_val <- tryCatch(cramerV(tab), error = function(e) NA)
           if (!is.null(test)) {
             return(tibble(
               p.value = test$p.value,
