@@ -111,7 +111,7 @@ myepi::getnas(dat = data)
 |children_can              |Categorical |    4929|1.56%       |
 
 
-### `cor_run()`
+### `cor_run()` ：还存在bug需要优化，不建议使用
 
 > 简洁的相关性报告
 
