@@ -13,6 +13,7 @@ library(myepi)
 - [1. `cox_run`: 高效完成 Cox 模型拟合与亚组分析](#cox_run)
 - [2. `forestplot()`: 易用的森林图绘制工具](#forestplot)
 - [3. `getnas()`: 简洁的缺失值报告](#getnas)
+- [4. `cor_run()`: 简洁的相关性报告](#cor_run)
 
 
 ## 核心功能
@@ -110,5 +111,27 @@ myepi::getnas(dat = data)
 |children_can              |Categorical |    4929|1.56%       |
 
 
+### `cor_run()`
 
+> 简洁的相关性报告
 
+- **功能**：自动根据提供的变量类型进行两两相关性分析，并给出相关系数的方向描述性解释
+
+**示例用法**：
+```r
+myepi::cor_run(df = data, vars = c('var1', 'var2', 'var3'))
+```
+
+**结果示例**
+
+```R
+# A tibble: 6 × 8
+  var1  var2  var1_type  var2_type   p.value method      correlation trend                
+  <chr> <chr> <chr>      <chr>         <dbl> <chr>           <dbl> <chr>                
+1 var1  var2  continuous continuous   0.234  Pearson         0.123  ↑ positive           
+2 var1  var3  continuous categorical  0.456  ANOVA           0.089  n/a                  
+3 var1  var4  continuous categorical  0.789  t-test          0.045  ↑ from 'X' to 'Y'    
+4 var2  var3  continuous categorical  0.321  ANOVA           0.102  n/a                  
+5 var3  var4  categorical categorical  0.123  Chi-square      0.156  n/a                  
+6 var4  var1  categorical continuous   0.789  t-test          0.045  ↑ from 'X' to 'Y'    
+```
