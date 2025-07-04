@@ -1,138 +1,159 @@
-# myepi：高效、灵活的流行病学回归与可视化工具包
+# `myepi`: 队列研究基础分析整合包
 
-**myepi** 是一个面向流行病学研究的数据分析辅助工具包，旨在简化队列研究中的回归建模与结果展示流程。该包集成了模型拟合与结果可视化的常用功能，特别适用于 Cox 比例风险模型分析与分组亚组研究。
-
-## Installation
-```R
-# 若希望直接更新该R包，则在未加载 myepi 的基础上直接运行下方代码即可
-devtools::install_github("yuanlinm/myepi")
-library(myepi)
-```
-
-## Contents
-- [1. `cox_run`: 高效完成 Cox 模型拟合与亚组分析](#cox_run)
-- [2. `forestplot()`: 易用的森林图绘制工具](#forestplot)
-- [3. `getnas()`: 简洁的缺失值报告](#getnas)
-- [4. `cor_run()`: 简洁的相关性报告](#cor_run)
-
-
-## 核心功能
-
-### `cox_run()`
-
-> 一行代码完成 Cox 模型拟合与亚组分析
-
-- **模型构建**：自动识别变量类型，支持连续变量与分类变量建模。
-- **多模型一体输出**：支持多组模型并行运行，输出统一格式的结果表，便于整理与后续绘图。
-- **稳健性检查**：提供默认的模型错误检测与提示，防止变量缺失或格式错误导致的失败。
-
-**示例用法**：
-
-```r
-myepi::cox_run(
-  data = data, time = 'LC_inci_difftime', event = 'LC_incidence',
-  riskvar = 'age', covars =  c("age","sex"), groupvar = 'sex', ref = NULL
-)
-```
-
-**结果示例**
-| group   | level | g_levels | case_total | incidence | hr   | hr_lower | hr_upper | beta | se   | p     |
-|---------|-------|----------|-------------|-----------|------|----------|----------|------|------|-------|
-| pm2.5   | All   | All      | 123/1000    | 245.78    | 1.75 | 1.30     | 2.35     | 0.56 | 0.15 | 0.001 |
-
-or
-
-| group   | level | g_levels | case_total | incidence | hr   | hr_lower | hr_upper | beta | se   | p     |
-|---------|-------|----------|-------------|-----------|------|----------|----------|------|------|-------|
-| smoke   | No    | All      | 80/1500     | 125.60    | 1.00 | 1      | 1      | 0  | 0  | 1   |
-| smoke   | Yes   | All      | 123/1000    | 245.78    | 1.75 | 1.30     | 2.35     | 0.56 | 0.15 | 0.001 |
-
-or
-
-|group |level     |g_levels |case_total | incidence|     hr| hr_lower| hr_upper|   beta|     se|         p|
-|:-----|:---------|:--------|:----------|---------:|------:|--------:|--------:|------:|------:|---------:|
-|urban |good      |rural    |411/5377  |     62.76| 1.1676|   0.9493|   1.4361| 0.1549| 0.1056| 0.1423593|
-|urban |poor      |rural    |171/2005  |     74.04| 1.2611|   0.9899|   1.6065| 0.2320| 0.1235| 0.0603900|
-|urban |good      |urban    |398/3383  |     99.44| 1.2648|   1.0797|   1.4817| 0.2349| 0.0807| 0.0036124|
-|urban |poor      |urban    |218/1364 |    139.69| 1.4647|   1.2140|   1.7671| 0.3817| 0.0958| 0.0000674|
-
-
+**这个R项目包含了一系列用于数据分析和可视化的函数，主要围绕生存分析中的Cox比例风险模型展开。以下是每个函数的详细说明和使用示例，欢迎使用与反馈。**
 
 ---
 
+## 1. `count_na`
 
+### 功能介绍
 
+`count_na` 函数用于检查数据框（data frame）中的缺失值（NA）。它可以对整个数据集进行检查，也可以根据指定的分组变量进行分组检查。函数会返回一个包含变量名、变量类型、缺失值数量和缺失率的数据框，并按缺失率从高到低排序。
 
-### `forestplot()` 
-
-> 高质量、灵活可调的森林图绘制工具
-
-- **多列信息展示**：支持左右两侧添加任意自定义列（如变量名称、HR值、95%CI、P值等）。
-- **全参数可调节**：图形的颜色、大小、字体、间距、置信区间线型等均可自定义，满足审稿图或演示图的精细化需求。
-- **支持科学记数法P值**：内置科学计数法格式化方案，适配流行病学常见的极小P值展示。
-- **与 cox_run() 无缝衔接**：可直接使用 cox_run() 的结果表进行绘图，一键生成高质量出版级别森林图。
-
-**示例用法**：
-```r
-myepi::forestplot(df = df,left_side_cols = c(1:4),
-      right_side_cols = c(11:12),
-      estimate = 'HR',
-      lower = 'HR_lower',
-      upper = 'HR_upper',
-      p_value_col = 'P'
-)
-```
-**结果示例**
-![x效果展示](temp.png)
-
----
-
-
-### `getnas()`
-
-> 简洁的缺失值报告
-
-- **功能**：快速按变量、类型和缺失率报告缺失值，并按缺失百分比排序。非常适合数据清理。
-
-**示例用法**：
-```r
-myepi::getnas(dat = data)
-```
-
-**结果示例**
-
-|Variable                  |Type        | Missing|MissingRate |
-|:-------------------------|:-----------|-------:|:-----------|
-|cancer_base_site          |Categorical |  315828|100%        |
-|aspirin                   |Categorical |  275700|87.29%      |
-|family_cancer             |Categorical |   12985|4.11%       |
-|siblings_can              |Categorical |    9854|3.12%       |
-|cough_sputum              |Categorical |    6702|2.12%       |
-|children_can              |Categorical |    4929|1.56%       |
-
-
-### `cor_run()` 
-
-> 简洁的相关性报告
-> ==还存在bug需要优化，不建议使用==
-
-- **功能**：自动根据提供的变量类型进行两两相关性分析，并给出相关系数的方向描述性解释
-
-**示例用法**：
-```r
-myepi::cor_run(df = data, vars = c('var1', 'var2', 'var3'))
-```
-
-**结果示例**
+### 使用示例
 
 ```R
-# A tibble: 6 × 8
-  var1  var2  var1_type  var2_type   p.value method      correlation trend                
-  <chr> <chr> <chr>      <chr>         <dbl> <chr>           <dbl> <chr>                
-1 var1  var2  continuous continuous   0.234  Pearson         0.123  ↑ positive           
-2 var1  var3  continuous categorical  0.456  ANOVA           0.089  n/a                  
-3 var1  var4  continuous categorical  0.789  t-test          0.045  ↑ from 'X' to 'Y'    
-4 var2  var3  continuous categorical  0.321  ANOVA           0.102  n/a                  
-5 var3  var4  categorical categorical  0.123  Chi-square      0.156  n/a                  
-6 var4  var1  categorical continuous   0.789  t-test          0.045  ↑ from 'X' to 'Y'    
+# 整体数据NA检查
+count_na(dat = my_data)
+# 按 'group' 分组检查
+count_na(dat = my_data, group_var = "group")
+```
+
+## 2. `cross_tb`
+
+### 功能介绍
+
+`cross_tb` 函数用于生成交叉表或分组统计摘要。对于分类变量，它计算每个组的频数和百分比；对于连续变量，它计算每个组的均值和中位数。该函数支持多个分组变量。
+
+### 使用示例
+
+```R
+# 运行函数，连续变量交叉汇总
+cross_tb(dat = my_data, var = "age", by = "group")
+# 运行函数，分类变量交叉汇总
+cross_tb(dat = my_data, var = "gender", by = "group")
+```
+
+## 3. `cox_run`
+
+### 功能介绍
+
+`cox_run` 是一个核心函数，用于执行Cox比例风险回归分析。它支持标准的生存数据格式（开始时间、结束时间、事件状态）和简单的生存数据格式（生存时间、事件状态）。该函数可以包含协变量，并能处理`strata()`和`cluster()`等特殊项进行基线风险宽容或时间依赖变量分析。
+
+### 参数说明
+
+- `data`: 数据框。
+- `time1`: (可选) 字符串，随访开始时间的变量名。
+- `time2`: (可选) 字符串，随访结束时间的变量名。
+- `timediff`: (可选) 字符串，生存时间的变量名。如果提供了`timediff`，则忽略`time1`和`time2`。
+- `event`: 字符串，结局事件的变量名（通常为0或1）。
+- `mainvar`: 字符串，要分析的主要关注变量。
+- `covars`: (可选) 字符串向量，协变量的名称，可纳入交互项。
+- `extra_vars`: (可选) 字符串向量，除了`mainvar`外，还希望在结果中展示的其他变量（例如交互项）。
+
+### 使用示例
+
+```R
+# run，函数还会不可见地返回一个列表，包含模型对象 (cox_result$model) 和结果数据框 (cox_result$result)。
+cox_result <- cox_run(data = lung, timediff = "time", event = "status", mainvar = "sex", covars = "age")
+```
+
+## 4. `cox_run_sub`
+
+### 功能介绍
+
+`cox_run_sub` 函数在`cox_run`的基础上，实现了亚组分析。它会根据指定的分组变量，对每个亚组分别运行Cox回归，并将结果汇总。这对于评估不同人群中某个变量的效应是否一致非常有用。
+
+### 参数说明
+
+- `data`: 数据框。
+- `group_var`: 字符串，用于划分亚组的变量名。
+- 其他参数与 `cox_run` 相同 (`time1`, `time2`, `timediff`, `event`, `mainvar`, `covars`, ...)。
+
+### 使用示例
+
+```R
+# run，函数还会不可见地返回一个列表，包含模型对象 (cox_result$model) 和结果数据框 (cox_result$result)。
+# 注意：结果中可能包含警告或NA，因为某些亚组的样本量太小无法建模。
+cox_result <- cox_run(data = lung,group_var="sex", timediff = "time", event = "status", mainvar = "sex", covars = "age")
+```
+
+## 5. `cox_run_q`
+
+### 功能介绍
+
+`cox_run_q` 函数用于处理连续型变量。它首先将指定的连续变量按分位数（如三分位数、四分位数）进行分组，然后将这个新生成的分组变量作为主要变量进行Cox回归分析。这有助于探究变量的非线性效应。
+
+### 参数说明
+
+- `data`: 数据框。
+- `mainvar`: 字符串，需要进行分位数转换的连续变量名。
+- `q`: 整数，指定要划分的组数（例如，3表示三分位数）。
+- 其他参数与 `cox_run` 相同 (`time1`, `time2`, `timediff`, `event`, `covars`, ...)。
+
+### 使用示例
+
+```R
+# run，函数还会不可见地返回一个列表，包含模型对象 (cox_result$model) 和结果数据框 (cox_result$result)。
+# 注意：由于时间依赖变量的长数据特性，本函数不支持基于时依变量的分位数Cox建模
+cox_result <- cox_run(data = lung,q=3, timediff = "time", event = "status", mainvar = "BMI", covars = "age")
+```
+
+## 6. `cox_het`
+
+### 功能介绍
+
+`cox_het` 函数用于检验亚组间的异质性。它通常接收 `cox_run_sub` 的输出结果，利用 `metafor` 包的功能，计算Cochran's Q统计量、I²统计量和对应的p值，以判断亚组间的效应是否存在显著差异。
+
+### 参数说明
+
+- `df`: 一个数据框，通常是 `cox_run_sub` 的输出结果。必须包含 `Subgroup`, `beta`, `se` 这几列。
+- `method`: 字符串，`metafor::rma` 函数的异质性检验方法，默认为 "REML"。
+- `digits`: 数字，结果保留的小数位数。
+
+### 使用示例
+
+```R
+# 可直接对 cox_run_sub 的结果进行异质性检验。
+het_result <- cox_het(df = subgroup_result_clean)
+```
+
+## 7. `plot_forest`
+
+### 功能介绍
+
+`plot_forest` 是一个强大的、基于 `ggplot2` 的森林图绘制函数。它专门设计用于可视化Cox回归的结果（或其他类似效应量的分析结果），能够将效应量（如HR）及其置信区间以图形方式展示，并在图形两侧附上相关的文本信息（如变量名、P值等）。该函数提供了极为丰富的参数来自定义图形的几乎每一个细节。
+
+### 参数说明
+
+该函数参数众多，这里仅列出核心参数：
+
+- `df`: 数据框，用于绘图的数据。
+- `left_side_cols`: 数值向量，指定显示在森林图左侧的列号。
+- `right_side_cols`: 数值向量，指定显示在森林图右侧的列号。
+- `estimate`: 字符串，效应量（如HR）的列名。
+- `lower`: 字符串，置信区间下限的列名。
+- `upper`: 字符串，置信区间上限的列名。
+- `x_limit`: 数值向量，`c(min, max)`，设置X轴范围。
+- `ref_line_value`: 数值，参考线的位置（通常为1）。
+- `p_value_col`: (可选) 字符串，P值列的列名，用于自动格式化。
+- ... 以及大量用于调整颜色、大小、字体、形状等的参数。
+
+### 使用示例
+
+```R
+# 我们可以直接使用 cox_run_sub 的结果来绘制森林图，并进一步利用topptx输出
+forest_plot <- plot_forest(
+  df = plot_data,
+  left_side_cols = c(2, 3), 
+  right_side_cols = c(11, 8), 
+  estimate = "HR",
+  lower = "HR_lower",
+  upper = "HR_upper",
+  x_limit = c(0.1, 2.5),
+  ref_line_value = 1,
+  p_value_col = "P",
+  p_value_round = 3
+)
+topptx(forest_plot, filename = 'dir/forest_plot.pptx')
 ```
