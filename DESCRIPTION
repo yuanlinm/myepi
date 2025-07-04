@@ -1,0 +1,18 @@
+Package: myepi
+Type: Package
+Title: Tools for Epidemiological Data Analysis and Visualization
+Version: 0.0.1
+Author: Yuanlin Mou [aut, cre]
+Maintainer: Yuanlin Mou <your_email@example.com>
+Description: Provides functions to simplify epidemiological data analysis,
+    including meta-analysis, data preprocessing, and visualization for
+    observational studies and cohort datasets.
+License: MIT
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 7.3.2
+Imports:
+    ggplot2,
+    metafor,
+    rlang,
+    stringr
