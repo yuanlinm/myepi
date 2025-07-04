@@ -2,13 +2,13 @@
 
 **这个R项目包含了一系列用于数据分析和可视化的函数，主要围绕生存分析中的Cox比例风险模型展开。以下是每个函数的详细说明和使用示例，欢迎使用与反馈。**
 ```
-1. count_na(缺失值报告)
-2. cross_tb(交叉表)
-3. cox_run(cox模型拟合)
-4. cox_run_sub(cox亚组分析)
-5. cox_run_q(cox分位数分析)
-6. cox_het(亚组异质性检验)
-7. plot_forest(森林图绘制)
+1. count_na
+2. cross_tb
+3. cox_run
+4. cox_run_sub
+5. cox_run_q
+6. cox_het
+7. plot_forest
 ```
 
 ---
