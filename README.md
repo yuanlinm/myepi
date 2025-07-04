@@ -5,6 +5,7 @@
 ```R
 # 若首次安装或需要更新本R包，请在为加载`myepi`包的前提下直接运行以下代码
 devtools::install_github("yuanlinm/myepi")
+library(myepi)
 ```
 
 
