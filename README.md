@@ -1,7 +1,13 @@
 # `myepi`: 队列研究基础分析整合包
 
 **这个R项目包含了一系列用于数据分析和可视化的函数，主要围绕生存分析中的Cox比例风险模型展开。以下是每个函数的详细说明和使用示例，欢迎使用与反馈。**
-> count_na(缺失值报告),cross_tb(交叉表),cox_run(cox模型拟合),cox_run_sub(cox亚组分析),cox_run_q(cox分位数分析),cox_het(亚组异质性检验),plot_forest(森林图绘制)
+> count_na(缺失值报告)
+> cross_tb(交叉表)
+> cox_run(cox模型拟合)
+> cox_run_sub(cox亚组分析)
+> cox_run_q(cox分位数分析)
+> cox_het(亚组异质性检验)
+> plot_forest(森林图绘制)
 
 ---
 
