@@ -51,11 +51,12 @@ cox_run <- function(data, time1 = NULL, time2 = NULL, timediff = NULL, event, ma
   }
   # 提取结果
   summ <- summary(fit)
+  conf <- as.data.frame(summ$conf.int)
   res <- as.data.frame(summ$coefficients)
   # 计算HR及置信区间上下界
   res$HR <- exp(res$coef)
-  res$HR_lower <- exp(res$coef - 1.96 * res$`se(coef)`)
-  res$HR_upper <- exp(res$coef + 1.96 * res$`se(coef)`)
+  res$HR_lower <- conf$`lower .95`
+  res$HR_upper <- conf$`upper .95`
   res$P <- res$`Pr(>|z|)`
   res$beta <- res$coef
   res$se <- res$`se(coef)`
