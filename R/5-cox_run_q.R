@@ -106,12 +106,12 @@ cox_run_q <- function(data, mainvar, q = 3, time1 = NULL, time2 = NULL, timediff
     out_info <- do.call(rbind, out_info)
     sub_out <- data.frame(
       varname = rownames(sub),
-      HR = sprintf("%.2f", exp(sub$coef)),
-      HR_lower = sprintf("%.2f", exp(sub$coef - 1.96 * sub$`se(coef)`)),
-      HR_upper = sprintf("%.2f", exp(sub$coef + 1.96 * sub$`se(coef)`)),
-      P = sprintf("%.3f", sub$`Pr(>|z|)`),
-      beta = sprintf("%.3f", sub$coef),
-      se = sprintf("%.3f", sub$`se(coef)`),
+      HR = as.numeric(sprintf("%.2f", exp(sub$coef))),
+      HR_lower = as.numeric(sprintf("%.2f", exp(sub$coef - 1.96 * sub$`se(coef)`))),
+      HR_upper = as.numeric(sprintf("%.2f", exp(sub$coef + 1.96 * sub$`se(coef)`))),
+      P = as.numeric(sprintf("%.3f", sub$`Pr(>|z|)`)),
+      beta = as.numeric(sprintf("%.3f", sub$coef)),
+      se = as.numeric(sprintf("%.3f", sub$`se(coef)`)),
       row.names = NULL,
       stringsAsFactors = FALSE
     )
