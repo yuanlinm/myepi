@@ -70,12 +70,12 @@ cox_run_q <- function(data, mainvar, q = 3, time1 = NULL, time2 = NULL, timediff
       Interval = interval_ref,
       Case_Total = case_total_ref,
       Incidence = incidence_ref,
-      HR = "1.00",
-      HR_lower = "1.00",
-      HR_upper = "1.00",
-      P = "0.000",
-      beta = "0.000",
-      se = "0.000",
+      HR = 1.00,
+      HR_lower = 1.00,
+      HR_upper = 1.00,
+      P = 0.000,
+      beta = 0.000,
+      se = 0.000,
       stringsAsFactors = FALSE
     )
     # 其他分位组
