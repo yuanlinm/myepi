@@ -175,13 +175,13 @@ cox_run <- function(data, time1 = NULL, time2 = NULL, timediff = NULL, event, ma
   out <- out[, c("varname_clean", "Interval", "Case_Total", "Incidence", "HR", "HR_lower", "HR_upper", "P", "beta", "se")]
   names(out)[1] <- "varname"  # 重命名第一列为varname
   
-  # 格式化输出
-  out$HR <- sprintf("%.2f", as.numeric(out$HR))
-  out$HR_lower <- sprintf("%.2f", as.numeric(out$HR_lower))
-  out$HR_upper <- sprintf("%.2f", as.numeric(out$HR_upper))
-  out$P <- sprintf("%.3f", as.numeric(out$P))
-  out$beta <- sprintf("%.3f", as.numeric(out$beta))
-  out$se <- sprintf("%.3f", as.numeric(out$se))
+  # 格式化输出，无须
+  # out$HR <- sprintf("%.2f", as.numeric(out$HR))
+  # out$HR_lower <- sprintf("%.2f", as.numeric(out$HR_lower))
+  # out$HR_upper <- sprintf("%.2f", as.numeric(out$HR_upper))
+  # out$P <- sprintf("%.3f", as.numeric(out$P))
+  # out$beta <- sprintf("%.3f", as.numeric(out$beta))
+  # out$se <- sprintf("%.3f", as.numeric(out$se))
   rownames(out) <- NULL
   # 控制台输出美化：只显示主要变量和额外关注变量，列名美化
   if (isTRUE(getOption("cox_run.print", TRUE))) {
