@@ -179,7 +179,7 @@ cox_run <- function(data, time1 = NULL, time2 = NULL, timediff = NULL, event, ma
   out$HR <- as.numeric(sprintf("%.2f", as.numeric(out$HR)))
   out$HR_lower <- as.numeric(sprintf("%.2f", as.numeric(out$HR_lower)))
   out$HR_upper <- as.numeric(sprintf("%.2f", as.numeric(out$HR_upper)))
-  out$P <- out$P
+  out$P <- as.numeric(out$P)
   out$beta <- as.numeric(sprintf("%.3f", as.numeric(out$beta)))
   out$se <- as.numeric(sprintf("%.3f", as.numeric(out$se)))
   rownames(out) <- NULL
