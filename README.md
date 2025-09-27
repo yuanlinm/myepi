@@ -27,6 +27,8 @@ library(myepi)
 | `cox_het` | 基于亚组结果 (beta/se) 的异质性检验 (Q, I2等) |
 | `plot_forest` | 自定义文本布局 + 线性或对数轴森林图 + 可自动生成 “HR (L-U)” 组合列 |
 
+![v0.0.3](cheatsheets/cheatsheet_v0.0.3.png "Cheat_Sheet")
+
 ---
 
 ## 快速上手
