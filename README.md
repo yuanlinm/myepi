@@ -1,180 +1,154 @@
-# `myepi`: 队列研究基础分析整合包
+# myepi: 队列研究与生存分析快速工作流工具包
 
-**这个R项目包含了一系列用于数据分析和可视化的函数，主要围绕生存分析中的Cox风险模型展开，以下是每个函数的详细说明和使用示例。**
-> 问题反馈与交流, 请关注微信公众号后直接向公众号发送消息即可, 欢迎提出新的开发需求与合作！公众号: **epi solution**
+`myepi` **聚焦流行病学 / 临床队列常规分析：缺失概览、描述统计、Cox 主效应 / 分位或自定义断点分组、亚组与异质性评估、以及可直接用于汇报与 PPT 的森林图。**
 
+> 反馈 / 需求 / 合作：欢迎关注公众号 **epi solution** 后直接发送留言。
 
+---
 
-```R
-# 若首次安装或需要更新本R包，请在未加载`myepi`包的前提下直接运行以下代码
+## 安装与加载
+
+```r
+# 首次安装或更新
+if (!requireNamespace("devtools", quietly = TRUE)) install.packages("devtools")
 devtools::install_github("yuanlinm/myepi")
 library(myepi)
 ```
 
+## 功能函数总览
 
-```R
-myepi::
-1. count_na
-2. cross_tb
-3. cox_run
-4. cox_run_sub
-5. cox_run_q
-6. cox_het
-7. plot_forest
+| 函数 | 作用简介 |
+|------|----------|
+| `count_na` | 缺失值扫描（可选分组） |
+| `cross_tb` | 目标变量 × 分组变量的交叉统计（分类=频数比例，连续=均值+中位数） |
+| `cox_run` | 核心 Cox 回归（支持 time1/time2 或 timediff；自动补参考水平行与发病率） |
+| `cox_run_sub` | 按分组变量循环调用 `cox_run` 的亚组分析（可格式化为绘图友好形状） |
+| `cox_run_q` | 连续变量按分位数或自定义断点分组 + 可选趋势性检验 |
+| `cox_het` | 基于亚组结果 (beta/se) 的异质性检验 (Q, I2等) |
+| `plot_forest` | 自定义文本布局 + 线性或对数轴森林图 + 可自动生成 “HR (L-U)” 组合列 |
+
+---
+
+## 快速上手
+
+```r
+# 1. 缺失扫描
+count_na(dat = df)
+
+# 2. 描述统计（例如性别按年龄组）
+cross_tb(dat = df, var = "sex", by = c("age_group"))
+
+# 3. 主效应 Cox
+m_main <- cox_run(df, time1 = "time_start", time1 = "time_end", event = "status", mainvar = "exposure", covars = c("age","sex"))
+head(m_main$result)
+
+# 4. 连续变量按四分位 + 趋势检验
+q_res <- cox_run_q(df, mainvar = "BMI", q = 4, timediff = "time", event = "status", covars = c("age","sex"), trend = TRUE)
+attr(q_res, "quantile_breaks")   # 断点始终可取（即使结果为空）
+
+# 5. 亚组分析（按 sex 分）
+sub_res <- cox_run_sub(df, group_var = "sex", timediff = "time", event = "status", mainvar = "exposure", covars = c("age","BMI"))
+
+# 6. 异质性检验
+cox_het(sub_res)
+
+# 7. 准备森林图（假设我们将亚组结果做了适当筛选/排序）
+forest_plot <- plot_forest(
+  df = sub_res,
+  left_side_cols  = c(2, 3),          # 例如 Subgroup, Case_Total
+  right_side_cols = c(6:9),          # 例如 HR, P （列号仅示意）
+  estimate = "HR", lower = "HR_lower", upper = "HR_upper",
+  add_est_ci = TRUE,                  # 自动生成 HR (L-U)
+  x_log = TRUE,                       # 对数刻度（更适合 HR）
+  x_limit = c(0.5, 3.0)
+)
+forest_plot
 ```
 
 ---
 
-## 1. `count_na`
+## 使用场景与结果输出流转Tips
 
-### 功能介绍
+### 1. 连续变量探索
+用 `cox_run_q` 将连续指标（如 BMI）按 3–5 组等频或临床分界点切分，观察各区间 HR，并利用 `trend = TRUE` 输出趋势性指标（第一行 `beta_trend` / `P_trend`）。
 
-`count_na` 函数用于检查数据框（data frame）中的缺失值（NA）。它可以对整个数据集进行检查，也可以根据指定的分组变量进行分组检查。函数会返回一个包含变量名、变量类型、缺失值数量和缺失率的数据框，并按缺失率从高到低排序。
+### 2. 快速生成汇报森林图
+使用 `cox_run_sub(plot_shape = TRUE)`或手工整理的绘图数据表 → `plot_forest`。
+### 3. 亚组一致性与异质性
+`cox_run_sub` 分析各亚组主效应 → `cox_het` 无缝对接完成对亚组间的异质性检验。
 
-### 使用示例
+### 4. 自动/自定义断点策略
+`cox_run_q(q = 3)`快速完成四分位数分析 ，`cox_run_q(q = c(10, 18.5, 24, 28, 40))` 直接反映临床或指南节点；结果属性中保留断点便于图形注释。
 
-```R
-# 整体数据NA检查
-count_na(dat = my_data)
-# 按 'group' 分组检查
-count_na(dat = my_data, group_var = "group")
-```
+---
 
-## 2. `cross_tb`
+## 函数要点速查
 
-### 功能介绍
+> 所有功能函数的参数解释均使用中文撰写，载入myepi包之后可以方便地查看函数的所有参数细节。
 
-`cross_tb` 函数用于生成交叉表或分组统计摘要。对于分类变量，它计算每个组的频数和百分比；对于连续变量，它计算每个组的均值和中位数。该函数支持多个分组变量。
+### count_na: 缺失报告
+简洁缺失分布；指定 `group_var` 可对关键分层（如中心 / 队列来源）做 QA 检查。
 
-### 使用示例
+### cross_tb: 交叉/频率表
+连续变量：均值+中位数；分类变量：长表输出频数+比例，支持 ≥1 分组变量。
 
-```R
-# 运行函数，连续变量交叉汇总
-cross_tb(dat = my_data, var = "age", by = "group")
-# 运行函数，分类变量交叉汇总
-cross_tb(dat = my_data, var = "gender", by = "group")
-```
+### cox_run: Cox模型
+支持 `time1,time2,event` 或 `timediff,event`；自动识别 `cluster()` 启用稳健标准误；自动识别`strata()`赋予差异基线风险；自动识别`*/+ term`处理相乘交互项；为分类主变量添加报告参考水平行并计算各水平的十万人年发病率等制表参数。
 
-## 3. `cox_run`
+### cox_run_q: 分位数分析
+整数 q → 等频分位；数值向量 → 自定义断点（严格递增）；趋势检验可选“组内中位数（`median`）”或“序号`ordinal`”得分；始终携带 `quantile_breaks` 属性。
 
-### 功能介绍
+### cox_run_sub: 亚组分析
+按分组水平循环调用 `cox_run`；产出包含 Subgroup、病例 / 总数、发病率、HR 及区间；可进一步转为绘图表格(`plot_shape`)。
 
-`cox_run` 是一个核心函数，用于执行Cox比例风险回归分析。它支持标准的生存数据格式（开始时间、结束时间、事件状态）和简单的生存数据格式（生存时间、事件状态）。该函数可以包含协变量，并能处理`strata()`和`cluster()`等特殊项进行基线风险宽容或时间依赖变量分析。
+### cox_het: 组间异质性检验
+对 Subgroup = “亚组名: 水平” 格式的结果拆分聚合，调用 `metafor::rma`；仅 ≥2 水平才计算。
 
-### 参数说明
+### plot_forest: 森林图绘制
+森林图左右文本列任意组合（通过列号指定）；线性或对数刻度（`x_log`）；可自动生成置信区间 “估计值 (下限-上限)” 列；P 值智能格式化（小值科学计数法）。
 
-- `data`: 数据框。
-- `time1`: (可选) 字符串，随访开始时间的变量名。
-- `time2`: (可选) 字符串，随访结束时间的变量名。
-- `timediff`: (可选) 字符串，生存时间的变量名。如果提供了`timediff`，则忽略`time1`和`time2`。
-- `event`: 字符串，结局事件的变量名（通常为0或1）。
-- `mainvar`: 字符串，要分析的主要关注变量。
-- `covars`: (可选) 字符串向量，协变量的名称，可纳入交互项。
-- `extra_vars`: (可选) 字符串向量，除了`mainvar`外，还希望在结果中展示的其他变量（例如交互项）。
+---
 
-### 使用示例
+## 返回结果与常见字段说明
+| 字段 | 含义 |
+|-------|------|
+| Case_Total | 事件数/总人数（或该水平样本） |
+| Incidence | 发病率（每 100000 人年） |
+| Interval | 连续变量区间或分类水平标签 |
+| HR, HR_lower, HR_upper | 危险比及 95% CI |
+| P | 双侧检验 P 值 |
+| beta, se | log(HR) 及其标准误 |
+| beta_trend, P_trend | 分位趋势检验结果（仅 `cox_run_q` ） |
 
-```R
-# run，函数还会不可见地返回一个列表，包含模型对象 (cox_result$model) 和结果数据框 (cox_result$result)。
-cox_result <- cox_run(data = lung, timediff = "time", event = "status", mainvar = "sex", covars = "age")
-```
+---
 
-## 4. `cox_run_sub`
+## 常见问题 (FAQ)
+**Q: 为什么 `cox_run_q` 有时返回空数据框但仍有断点属性?**  
+A: 当无法形成有效非参考组（例如数据全 NA）时仍保留 `quantile_breaks`，方便你记录切分方案。
 
-### 功能介绍
+**Q: 森林图的列为什么用列号而不是列名?**  
+A: 便于快速试错与灵活重排；如果更偏好列名，可在外层写一个包装函数映射。
 
-`cox_run_sub` 函数在`cox_run`的基础上，实现了亚组分析。它会根据指定的分组变量，对每个亚组分别运行Cox回归，并将结果汇总。这对于评估不同人群中某个变量的效应是否一致非常有用。
+**Q: P 值格式能否直接用于计算?**  
+A: 图形中展示的为格式化字符串，如需进一步计算，请使用源结果表中原始数值列（不要对格式化列再解析）。
 
-### 参数说明
+---
 
-- `data`: 数据框。
-- `group_var`: 字符串，用于划分亚组的变量名。
-- 其他参数与 `cox_run` 相同 (`time1`, `time2`, `timediff`, `event`, `mainvar`, `covars`, ...)。
+## 设计理念
+少即是多：保持“90% 需求一步到位 + 10% 可直接在返回表/代码层二次加工”。
 
-### 使用示例
 
-```R
-# run，函数还会不可见地返回一个列表，包含模型对象 (cox_result$model) 和结果数据框 (cox_result$result)。
-# 注意：结果中可能包含警告或NA，因为某些亚组的样本量太小无法建模。
-cox_result <- cox_run(data = lung,group_var="sex", timediff = "time", event = "status", mainvar = "sex", covars = "age")
-```
 
-## 5. `cox_run_q`
+---
 
-### 功能介绍
+## 引用
+如在研究或报告中使用本包，可在方法部分简单描述：
+“Statistical analyses were performed in R using the myepi package (GitHub: yuanlinm/myepi) for missing data profiling, Cox regression, subgroup and heterogeneity analyses, and forest plot visualization.”
 
-`cox_run_q` 函数用于处理连续型变量。它首先将指定的连续变量按分位数（如三分位数、四分位数）进行分组，然后将这个新生成的分组变量作为主要变量进行Cox回归分析。这有助于探究变量的非线性效应。
+---
 
-### 参数说明
+## 反馈
+提出改进建议或功能需求：公众号 **epi solution** 留言（请尽量附“使用场景 + 期望输出”）。
 
-- `data`: 数据框。
-- `mainvar`: 字符串，需要进行分位数转换的连续变量名。
-- `q`: 整数，指定要划分的组数（例如，3表示三分位数）。
-- 其他参数与 `cox_run` 相同 (`time1`, `time2`, `timediff`, `event`, `covars`, ...)。
+---
 
-### 使用示例
-
-```R
-# run，函数还会不可见地返回一个列表，包含模型对象 (cox_result$model) 和结果数据框 (cox_result$result)。
-# 注意：由于时间依赖变量的长数据特性，本函数不支持基于时依变量的分位数Cox建模
-cox_result <- cox_run(data = lung,q=3, timediff = "time", event = "status", mainvar = "BMI", covars = "age")
-```
-
-## 6. `cox_het`
-
-### 功能介绍
-
-`cox_het` 函数用于检验亚组间的异质性。它通常接收 `cox_run_sub` 的输出结果，利用 `metafor` 包的功能，计算Cochran's Q统计量、I²统计量和对应的p值，以判断亚组间的效应是否存在显著差异。
-
-### 参数说明
-
-- `df`: 一个数据框，通常是 `cox_run_sub` 的输出结果。必须包含 `Subgroup`, `beta`, `se` 这几列。
-- `method`: 字符串，`metafor::rma` 函数的异质性检验方法，默认为 "REML"。
-- `digits`: 数字，结果保留的小数位数。
-
-### 使用示例
-
-```R
-# 可直接对 cox_run_sub 的结果进行异质性检验。
-het_result <- cox_het(df = subgroup_result_clean)
-```
-
-## 7. `plot_forest`
-
-### 功能介绍
-
-`plot_forest` 是一个强大的、基于 `ggplot2` 的森林图绘制函数。它专门设计用于可视化Cox回归的结果（或其他类似效应量的分析结果），能够将效应量（如HR）及其置信区间以图形方式展示，并在图形两侧附上相关的文本信息（如变量名、P值等）。该函数提供了极为丰富的参数来自定义图形的几乎每一个细节。
-
-### 参数说明
-
-该函数参数众多，这里仅列出核心参数：
-
-- `df`: 数据框，用于绘图的数据。
-- `left_side_cols`: 数值向量，指定显示在森林图左侧的列号。
-- `right_side_cols`: 数值向量，指定显示在森林图右侧的列号。
-- `estimate`: 字符串，效应量（如HR）的列名。
-- `lower`: 字符串，置信区间下限的列名。
-- `upper`: 字符串，置信区间上限的列名。
-- `x_limit`: 数值向量，`c(min, max)`，设置X轴范围。
-- `ref_line_value`: 数值，参考线的位置（通常为1）。
-- `p_value_col`: (可选) 字符串，P值列的列名，用于自动格式化。
-- ... 以及大量用于调整颜色、大小、字体、形状等的参数。
-
-### 使用示例
-
-```R
-# 我们可以直接使用 cox_run_sub 的结果来绘制森林图，并进一步利用topptx输出
-forest_plot <- plot_forest(
-  df = plot_data,
-  left_side_cols = c(2, 3), 
-  right_side_cols = c(11, 8), 
-  estimate = "HR",
-  lower = "HR_lower",
-  upper = "HR_upper",
-  x_limit = c(0.1, 2.5),
-  ref_line_value = 1,
-  p_value_col = "P",
-  p_value_round = 3
-)
-topptx(forest_plot, filename = 'dir/forest_plot.pptx')
-```

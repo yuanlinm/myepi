@@ -14,6 +14,7 @@ cox_run_sub(
   mainvar,
   covars = NULL,
   extra_vars = NULL,
+  plot_shape = FALSE,
   ...
 )
 }
@@ -36,10 +37,14 @@ cox_run_sub(
 
 \item{extra_vars}{额外关注变量名（字符串向量，可为NULL）}
 
+\item{plot_shape}{是否返回绘图友好格式（TRUE 返回分组标题 + 缩进结构；FALSE 返回原始长表, 后续异质性检验友好），默认 FALSE}
+
 \item{...}{传递给cox_run的其他参数}
 }
 \value{
-一个数据框，包含分组、变量、HR、HR_lower、HR_upper、P、beta、se等
+一个数据框：
+  - 当 plot_shape = FALSE：原始长表（每亚组一行）
+  - 当 plot_shape = TRUE：包含列 Group / Subgroup（Group 行为空 Subgroup，子行 Group 为空或缩进），便于直接用于森林图分面或分组标题展示
 }
 \description{
 分组/亚组Cox回归批量分析函数，本函数支持基本的Cox回归分析和时间依赖（长数据）变量的Cox回归亚组分析。

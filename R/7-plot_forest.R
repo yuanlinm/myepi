@@ -39,7 +39,7 @@
 #' @param ref_line_value num，指定参考线的位置，默认为1
 #' @param ref_line_size num，指定参考线的粗细，默认为0.5
 #' @param ref_line_color num，指定参考线的颜色，默认为black
-#' @param col_name_face chr，指定纵标目是否加粗，默认为bold，其他为plain/italic
+#' @param col_name_face chr，指定纵标目是否加粗，默认为plain，其他为plain/italic
 #' @param col_line_type chr，指定标目线的类型，默认为solid
 #' @param col_line_color chr，指定标目线的颜色，默认为black
 #' @param col_line_size num，指定标目线的粗细，默认为0.5
@@ -53,6 +53,12 @@
 #' @param p_value_round num，指定P值列round保留小数位数，，默认为NULL，若指定则p_value_col不能为空
 #' @param round_cols chr_vector，字符串向量，指定需要round的列名，默认为NULL，若指定则round_digit不能为空
 #' @param round_digit num，指定round列保留小数位数，，默认为NULL，若指定则round_cols不能为空
+#' @param x_log 逻辑值，是否在 x 轴使用对数刻度（对 HR/OR 等常见>0指标友好），默认 FALSE；若 TRUE 则在对数空间中绘制
+#' @param x_log_base 对数底数，默认 10
+#' @param x_breaks 当 x_log=TRUE 时，可传入原始尺度的刻度位置向量；NULL 时自动按底数生成（覆盖在 x_limit 范围内的幂序列）
+#' @param add_est_ci 逻辑值，是否基于 estimate/lower/upper 自动生成格式化列 "估计值 (lower-upper)"，默认 FALSE
+#' @param est_ci_digits 整数，生成组合列时 HR/OR 及区间小数位，默认 2
+#' @param est_ci_colname 字符串，新列列名，默认 "Effect"
 
 # 声明返回对象类型
 #' @return A ggplot2 object
@@ -66,6 +72,12 @@ plot_forest = function(df,
                      lower = NULL,
                      upper = NULL,
                      bar_scale = 1,
+                     x_log = FALSE,
+                     x_log_base = 10,
+                     x_breaks = NULL,
+                     add_est_ci = FALSE,
+                     est_ci_digits = 2,
+                     est_ci_colname = "Effect",
                      h_scale = 0.08,
                      gap_value = 0.4,
                      x_limit = c(0.8, 3.2),
@@ -83,7 +95,7 @@ plot_forest = function(df,
                      ref_line_value = 1,
                      ref_line_size = 0.5,
                      ref_line_color = 'black',
-                     col_name_face = 'bold',
+                     col_name_face = 'plain',
                      col_line_type = 'solid',
                      col_line_color = 'black',
                      col_line_size = 0.5,
@@ -114,22 +126,89 @@ plot_forest = function(df,
     # scale的尺度与x_limit的限值相关
     # 设定x_limit步进和映射
     # 注意定义初始的左侧，右侧数据极限值
+    # 若需要添加组合列（在任何缩放之前，以原始数值格式化）
+    if (isTRUE(add_est_ci)) {
+      if (is.null(estimate) || is.null(lower) || is.null(upper)) {
+        stop("add_est_ci=TRUE 时必须提供 estimate, lower, upper 列名")
+      }
+      if (!all(c(estimate, lower, upper) %in% names(df))) {
+        stop("指定的 estimate/lower/upper 列在 df 中不存在")
+      }
+      fmt_num <- function(v) sprintf(paste0("%.", est_ci_digits, "f"), suppressWarnings(as.numeric(v)))
+      effect_str <- paste0(fmt_num(df[[estimate]]), " (", fmt_num(df[[lower]]), "-", fmt_num(df[[upper]]), ")")
+      # 判断基于用户传入的 right_side_cols 第一列：如果该列 NA，则不显示 effect（置 NA）
+      original_rsc <- right_side_cols  # 先保存用户输入用于判断
+      first_col_mask <- NULL
+      if (!is.null(original_rsc)) {
+        # 支持字符或数字
+        first_idx <- if (is.numeric(original_rsc)) original_rsc[1] else match(original_rsc[1], names(df))
+        if (!is.na(first_idx) && first_idx >= 1 && first_idx <= ncol(df)) {
+          first_col_mask <- is.na(df[[ first_idx ]])
+        }
+      }
+      if (!is.null(first_col_mask)) {
+        effect_str[first_col_mask] <- NA_character_
+      }
+      df[[est_ci_colname]] <- effect_str
+      # 将新列自动放到 right_side_cols 首位
+      # 若用户没传 right_side_cols，则默认使用新列
+      if (is.null(right_side_cols)) {
+        right_side_cols <- which(names(df) == est_ci_colname)
+      } else {
+        # 转换为索引（可能用户传的是数字或字符）
+        if (!is.numeric(right_side_cols)) {
+          # 字符列名 -> 索引
+            right_side_cols <- match(right_side_cols, names(df))
+        }
+        new_idx <- which(names(df) == est_ci_colname)
+        right_side_cols <- c(new_idx, right_side_cols)
+      }
+    }
+
     df$order = c(nrow(df):1)
-    df$x_fake_value = df[[estimate]] * bar_scale
-    df$x_ll_fake_value = df[[lower]] * bar_scale
-    df$x_ul_fake_value = df[[upper]] * bar_scale
-    # 定义数据映射
-    true_min = x_limit[1]
-    true_max = x_limit[2]
-    x_axis_df = data.frame(
-      ref_value = seq(true_min, true_max, by = x_step) * bar_scale,
-      lable_value = seq(true_min, true_max, by = x_step)
-    )
+    if (isTRUE(x_log)) {
+      if (any(df[[estimate]] <= 0, na.rm = TRUE) || any(df[[lower]] <= 0, na.rm = TRUE) || any(df[[upper]] <= 0, na.rm = TRUE)) {
+        stop("对数刻度要求 estimate / lower / upper 全部 > 0")
+      }
+      # 在对数空间进行 bar_scale 线性放大
+      log_fun <- function(v) log(v, base = x_log_base)
+      df$x_fake_value = log_fun(df[[estimate]]) * bar_scale
+      df$x_ll_fake_value = log_fun(df[[lower]]) * bar_scale
+      df$x_ul_fake_value = log_fun(df[[upper]]) * bar_scale
+      # 生成刻度（原始尺度）
+      if (is.null(x_breaks)) {
+        rng <- range(c(df[[lower]], df[[upper]], x_limit), na.rm = TRUE)
+        exp_seq <- floor(log(rng[1], base = x_log_base)):ceiling(log(rng[2], base = x_log_base))
+        x_breaks <- (x_log_base) ^ exp_seq
+        x_breaks <- x_breaks[x_breaks >= rng[1] & x_breaks <= rng[2]]
+      }
+      # 过滤在 x_limit 范围外的刻度
+      x_breaks <- x_breaks[x_breaks >= min(x_limit) & x_breaks <= max(x_limit)]
+      true_min <- min(x_limit)
+      true_max <- max(x_limit)
+      x_axis_df <- data.frame(
+        ref_value = log_fun(x_breaks) * bar_scale,
+        lable_value = x_breaks
+      )
+      ref_line_plot <- log_fun(ref_line_value) * bar_scale
+    } else {
+      # 线性刻度
+      df$x_fake_value = df[[estimate]] * bar_scale
+      df$x_ll_fake_value = df[[lower]] * bar_scale
+      df$x_ul_fake_value = df[[upper]] * bar_scale
+      true_min = x_limit[1]
+      true_max = x_limit[2]
+      x_axis_df = data.frame(
+        ref_value = seq(true_min, true_max, by = x_step) * bar_scale,
+        lable_value = seq(true_min, true_max, by = x_step)
+      )
+      ref_line_plot <- ref_line_value * bar_scale
+    }
     p = ggplot(df, aes(x = x_fake_value, y = order)) +
       annotate(
         "segment",
-        x = ref_line_value * bar_scale,
-        xend = ref_line_value * bar_scale,
+        x = ref_line_plot,
+        xend = ref_line_plot,
         y = min(df$order) - 0.5,
         yend = max(df$order) + 0.5,
         linetype = ref_line_type,
@@ -146,8 +225,8 @@ plot_forest = function(df,
                  size = box_size,
                  color = box_color) +
       scale_x_continuous(
-        breaks = c(x_axis_df$ref_value, ref_line_value * bar_scale),
-        labels = c(x_axis_df$lable_value, ref_line_value),
+        breaks = unique(c(x_axis_df$ref_value, ref_line_plot)),
+        labels = unique(c(x_axis_df$lable_value, ref_line_value)),
         expand = c(h_scale, h_scale)
       ) +
       scale_y_continuous(expand = expansion(mult = c(0.01, 0.1))) +
@@ -171,8 +250,15 @@ plot_forest = function(df,
         axis.title.x = element_blank()
       )
     # 定义森林图左右侧极限值
-    left_max_limit = true_min * bar_scale + gap_value
-    right_min_limit = true_max * bar_scale - gap_value
+    if (isTRUE(x_log)) {
+      # 在 log 空间使用转换后范围
+      if (!exists("log_fun")) log_fun <- function(v) log(v, base = x_log_base)
+      left_max_limit = log_fun(true_min) * bar_scale + gap_value
+      right_min_limit = log_fun(true_max) * bar_scale - gap_value
+    } else {
+      left_max_limit = true_min * bar_scale + gap_value
+      right_min_limit = true_max * bar_scale - gap_value
+    }
     # 数据round
     if (!is.null(p_value_col) & !is.null(p_value_round)) {
       # 科学计数法美化，底数两位小数，>0.001显示三位小数，否则科学计数（Unicode上标）

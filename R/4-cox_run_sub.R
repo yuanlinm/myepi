@@ -9,10 +9,13 @@
 #' @param mainvar 关注变量名（字符串）
 #' @param covars 协变量名（字符串向量，可为NULL）
 #' @param extra_vars 额外关注变量名（字符串向量，可为NULL）
+#' @param plot_shape 是否返回绘图友好格式（TRUE 返回分组标题 + 缩进结构；FALSE 返回原始长表, 后续异质性检验友好），默认 FALSE
 #' @param ... 传递给cox_run的其他参数
-#' @return 一个数据框，包含分组、变量、HR、HR_lower、HR_upper、P、beta、se等
+#' @return 一个数据框：
+#'   - 当 plot_shape = FALSE：原始长表（每亚组一行）
+#'   - 当 plot_shape = TRUE：包含列 Group / Subgroup（Group 行为空 Subgroup，子行 Group 为空或缩进），便于直接用于森林图分面或分组标题展示
 #' @export
-cox_run_sub <- function(data, group_var, time1 = NULL, time2 = NULL, timediff = NULL, event, mainvar, covars = NULL, extra_vars = NULL, ...) {
+cox_run_sub <- function(data, group_var, time1 = NULL, time2 = NULL, timediff = NULL, event, mainvar, covars = NULL, extra_vars = NULL, plot_shape = FALSE, ...) {
   if (!group_var %in% names(data)) stop("分组变量不在数据框中")
   group_levels <- unique(data[[group_var]])
   res_list <- lapply(group_levels, function(g) {
@@ -57,7 +60,48 @@ cox_run_sub <- function(data, group_var, time1 = NULL, time2 = NULL, timediff = 
   if (!is.null(out)) {
     col_order <- c("varname", "Subgroup", "Case_Total", "Incidence", setdiff(colnames(out), c("varname", "Subgroup", "Case_Total", "Incidence", group_var)))
     out <- out[, col_order, drop = FALSE]
-    out <- out %>% arrange(varname, Subgroup)
+    # base R 排序：先 varname 再 Subgroup
+    out <- out[order(out$varname, out$Subgroup), , drop = FALSE]
+    if (isTRUE(plot_shape)) {
+      # 拆分 Subgroup -> Group 名称 与 具体水平
+      # Subgroup 形式: group_var: level
+      tmp <- strsplit(out$Subgroup, ": ")
+      group_names <- vapply(tmp, function(x) if (length(x) >= 1) x[1] else NA_character_, character(1))
+      subgroup_levels <- vapply(tmp, function(x) if (length(x) >= 2) x[2] else NA_character_, character(1))
+      # 构造分组标题行
+      unique_groups <- unique(group_names)
+      formatted_list <- vector("list", length = length(unique_groups))
+      for (i in seq_along(unique_groups)) {
+        g <- unique_groups[i]
+        block <- out[group_names == g, , drop = FALSE]
+        # 标题行：复制结构，除 varname/ Subgroup 外其他列 NA
+        title_row <- block[1, , drop = FALSE]
+        title_row[ , setdiff(names(title_row), c("varname", "Subgroup"))] <- NA
+        title_row$Subgroup <- ""
+        title_row$varname <- g
+        # 子行：保留 varname 以便 rbind 一致；稍后再统一处理
+        block$Subgroup <- subgroup_levels[group_names == g]
+        formatted_block <- rbind(title_row, block)
+        formatted_list[[i]] <- formatted_block
+      }
+      formatted <- do.call(rbind, formatted_list)
+      # 重建列：Group, Subgroup, Case_Total, Incidence, Interval, HR, HR_lower, HR_upper, P, beta, se
+      # 原列中 Interval 可能存在（源自 cox_run），确保存在即取；若没有则补 NA
+      if (!"Interval" %in% names(formatted)) formatted$Interval <- NA
+      # 新建 Group 列：来自 varname（标题行），子行置空
+      formatted$Group <- formatted$varname
+      formatted$Group[formatted$Subgroup != ""] <- ""
+      # 去掉旧 varname 列
+      formatted$varname <- NULL
+      # 统一列顺序
+      keep_cols <- c("Group", "Subgroup", "Case_Total", "Incidence", "Interval",
+                     "HR", "HR_lower", "HR_upper", "P", "beta", "se")
+      # 补全缺失列
+      for (cc in keep_cols) if (!cc %in% names(formatted)) formatted[[cc]] <- NA
+      formatted <- formatted[, keep_cols, drop = FALSE]
+      rownames(formatted) <- NULL
+      out <- formatted
+    }
   }
   rownames(out) <- NULL
   # 只返回结果，不自动打印

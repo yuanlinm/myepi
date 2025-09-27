@@ -17,6 +17,12 @@ plot_forest(
   lower = NULL,
   upper = NULL,
   bar_scale = 1,
+  x_log = FALSE,
+  x_log_base = 10,
+  x_breaks = NULL,
+  add_est_ci = FALSE,
+  est_ci_digits = 2,
+  est_ci_colname = "Effect",
   h_scale = 0.08,
   gap_value = 0.4,
   x_limit = c(0.8, 3.2),
@@ -34,7 +40,7 @@ plot_forest(
   ref_line_value = 1,
   ref_line_size = 0.5,
   ref_line_color = "black",
-  col_name_face = "bold",
+  col_name_face = "plain",
   col_line_type = "solid",
   col_line_color = "black",
   col_line_size = 0.5,
@@ -64,6 +70,18 @@ plot_forest(
 \item{upper}{chr，列名，指定森林图box的error bar 上限}
 
 \item{bar_scale}{num，调整森林图box的error bar整理宽窄，默认为1}
+
+\item{x_log}{逻辑值，是否在 x 轴使用对数刻度（对 HR/OR 等常见>0指标友好），默认 FALSE；若 TRUE 则在对数空间中绘制}
+
+\item{x_log_base}{对数底数，默认 10}
+
+\item{x_breaks}{当 x_log=TRUE 时，可传入原始尺度的刻度位置向量；NULL 时自动按底数生成（覆盖在 x_limit 范围内的幂序列）}
+
+\item{add_est_ci}{逻辑值，是否基于 estimate/lower/upper 自动生成格式化列 "估计值 (lower-upper)"，默认 FALSE}
+
+\item{est_ci_digits}{整数，生成组合列时 HR/OR 及区间小数位，默认 2}
+
+\item{est_ci_colname}{字符串，新列列名，默认 "Effect"}
 
 \item{h_scale}{num，调整森林图水平方向的整体宽窄，默认为0.08}
 
@@ -99,7 +117,7 @@ plot_forest(
 
 \item{ref_line_color}{num，指定参考线的颜色，默认为black}
 
-\item{col_name_face}{chr，指定纵标目是否加粗，默认为bold，其他为plain/italic}
+\item{col_name_face}{chr，指定纵标目是否加粗，默认为plain，其他为plain/italic}
 
 \item{col_line_type}{chr，指定标目线的类型，默认为solid}
 

@@ -73,80 +73,80 @@ cox_run <- function(data, time1 = NULL, time2 = NULL, timediff = NULL, event, ma
   
   # 计算新增的三列：Interval、Case_Total、Incidence
   calculate_descriptive_stats <- function(varname, data, event, time1, time2, timediff) {
-    # 提取原始变量名（去除因子水平后缀）
+    # 提取基础变量名及识别是否为分类水平
     base_var <- varname
-    
-    # 检查是否为因子水平变量（如education2, education高中等）
     is_factor_level <- FALSE
-    for (main_v in mainvar) {
-      if (varname != main_v && startsWith(varname, main_v)) {
-        base_var <- main_v
+    for (mv in mainvar) {
+      if (varname != mv && startsWith(varname, mv)) {
+        base_var <- mv
         is_factor_level <- TRUE
         break
       }
     }
-    
-    # 如果变量不在数据中，返回默认值
     if (!base_var %in% names(data)) {
-      return(list(interval = "NA", case_total = "NA", incidence = "NA"))
+      return(list(interval = NA_character_, case_total = NA_character_, incidence = NA_character_))
     }
-    
-    var_data <- data[[base_var]]
-    event_data <- data[[event]]
-    
-    # 计算总人年（整体数据集）
-    if (!is.null(timediff)) {
-      person_years <- sum(data[[timediff]], na.rm = TRUE)
+    x <- data[[base_var]]
+    ev <- data[[event]]
+    # 计算人年（整体用于连续变量；分类水平时用该水平子集）
+    if (is.null(timediff)) {
+      time_vec <- data[[time2]] - data[[time1]]
     } else {
-      person_years <- sum(data[[time2]] - data[[time1]], na.rm = TRUE)
+      time_vec <- data[[timediff]]
     }
-    
-    # 计算整体数据集的Case_Total和Incidence
-    total_cases <- sum(event_data, na.rm = TRUE)
-    total_n <- nrow(data)
-    case_total <- paste0(total_cases, "/", total_n)
-    if (person_years > 0) {
-      incidence <- sprintf("%.2f", (total_cases / (person_years/365.25)) * 1e5)
-    } else {
-      incidence <- "0.00"
+    # 连续变量：整体区间 + 总体事件率
+    if (is.numeric(x) && !is.factor(x)) {
+      person_years <- sum(time_vec, na.rm = TRUE)
+      total_cases <- sum(ev == 1, na.rm = TRUE)
+      total_n <- sum(!is.na(x))
+      incidence <- if (person_years > 0) sprintf("%.2f", total_cases / (person_years/365.25) * 1e5) else NA_character_
+      interval <- paste0(sprintf("%.2f", min(x, na.rm = TRUE)), "-", sprintf("%.2f", max(x, na.rm = TRUE)))
+      return(list(interval = interval,
+                  case_total = paste0(total_cases, "/", total_n),
+                  incidence = incidence))
     }
-    
-    # 判断变量类型并计算Interval
-    if (is.numeric(var_data) && !is.factor(var_data)) {
-      # 连续变量：min-max格式
-      interval <- paste0(sprintf("%.2f", min(var_data, na.rm = TRUE)), "-", 
-                         sprintf("%.2f", max(var_data, na.rm = TRUE)))
-    } else {
-      # 分类变量：显示对应的水平
-      if (is_factor_level) {
-        # 这是一个因子水平，提取水平名称
-        level_name <- gsub(paste0("^", base_var), "", varname)
-        
-        # 检查是否为纯数字（如education2中的"2"）
-        if (grepl("^[0-9]+$", level_name)) {
-          # 纯数字，获取对应的因子水平
-          if (is.factor(var_data)) {
-            level_index <- as.numeric(level_name)
-            if (level_index <= length(levels(var_data))) {
-              interval <- levels(var_data)[level_index]
-            } else {
-              interval <- level_name
-            }
-          } else {
-            # 非因子变量，显示数字水平
-            interval <- level_name
-          }
+    # 分类变量：若是变量整体行（非水平）仍给整体；若是某个水平行则给该水平特异统计
+    # 推断水平名称（适配编码：变量名后直接拼接水平或数字索引）
+    level_interval <- "-"
+    case_total <- NA_character_
+    incidence <- NA_character_
+    if (is_factor_level) {
+      # 去掉前缀
+      raw_level <- sub(paste0("^", base_var), "", varname)
+      # 若后缀是纯数字且 x 为 factor, 按 index 取水平；否则直接使用后缀字符
+      if (is.factor(x) && grepl("^[0-9]+$", raw_level)) {
+        idx <- suppressWarnings(as.integer(raw_level))
+        if (!is.na(idx) && idx >= 1 && idx <= length(levels(x))) {
+          level_interval <- levels(x)[idx]
         } else {
-          # 非数字后缀，直接显示（如education高中中的"高中"）
-          interval <- level_name
+          level_interval <- raw_level
         }
       } else {
-        # 整个分类变量，显示"-"
-        interval <- "-"
+        level_interval <- raw_level
       }
+      sel <- if (is.factor(x)) {
+        # 与真实水平匹配（优先用水平文字）
+        if (level_interval %in% levels(x)) x == level_interval else x == raw_level
+      } else {
+        # 非 factor 但被当作分类：匹配字符化后缀（可能极少见）
+        as.character(x) == raw_level
+      }
+      n_level <- sum(sel, na.rm = TRUE)
+      cases_level <- sum(ev[sel] == 1, na.rm = TRUE)
+      # 该水平人年
+      py_level <- sum(time_vec[sel], na.rm = TRUE)
+      incidence <- if (py_level > 0) sprintf("%.2f", cases_level / (py_level/365.25) * 1e5) else NA_character_
+      case_total <- paste0(cases_level, "/", n_level)
+      return(list(interval = level_interval, case_total = case_total, incidence = incidence))
+    } else {
+      # 分类变量整体行：提供整体病例/样本 与 总体发病率
+      n_total <- sum(!is.na(x))
+      cases_total <- sum(ev == 1, na.rm = TRUE)
+      py_total <- sum(time_vec, na.rm = TRUE)
+      incidence <- if (py_total > 0) sprintf("%.2f", cases_total / (py_total/365.25) * 1e5) else NA_character_
+      case_total <- paste0(cases_total, "/", n_total)
+      return(list(interval = "-", case_total = case_total, incidence = incidence))
     }
-    
-    return(list(interval = interval, case_total = case_total, incidence = incidence))
   }
   
   # 为每个变量计算新列
@@ -174,6 +174,59 @@ cox_run <- function(data, time1 = NULL, time2 = NULL, timediff = NULL, event, ma
   # 重新排列列顺序，使用清理后的变量名
   out <- out[, c("varname_clean", "Interval", "Case_Total", "Incidence", "HR", "HR_lower", "HR_upper", "P", "beta", "se")]
   names(out)[1] <- "varname"  # 重命名第一列为varname
+
+  # 若 mainvar 中存在分类变量，补充参考水平（HR=1）行：
+  add_ref_rows <- list()
+  for (mv in mainvar) {
+    if (!mv %in% names(data)) next
+    x <- data[[mv]]
+    if (is.factor(x) || is.character(x)) {
+      # 识别参考水平：若为 factor 用第一个 level，否则用排序后第一个唯一值
+      if (is.factor(x)) {
+        ref_level <- levels(x)[1]
+        sel <- x == ref_level
+      } else {
+        ux <- sort(unique(x))
+        ref_level <- ux[1]
+        sel <- x == ref_level
+      }
+      # 构造该参考水平的 varname 编码（匹配建模展开的命名规则：变量整体行 + 水平行）
+      ref_varname_pattern <- paste0("^", mv, "$")
+      # 如果结果里已经包含该参考水平（有些编码方式可能已经出现），则跳过
+      already_has <- any(grepl(paste0("^", mv, ref_level, "$"), out$varname)) || any(out$varname == mv & out$Interval == ref_level)
+      if (already_has) next
+      # 计算参考水平统计
+      if (is.null(timediff)) {
+        time_vec <- data[[time2]] - data[[time1]]
+      } else {
+        time_vec <- data[[timediff]]
+      }
+      n_level <- sum(sel, na.rm = TRUE)
+      cases_level <- sum(data[[event]][sel] == 1, na.rm = TRUE)
+      py_level <- sum(time_vec[sel], na.rm = TRUE)
+      incidence_level <- if (py_level > 0) sprintf("%.2f", cases_level / (py_level/365.25) * 1e5) else NA_character_
+      # 插入行（放在该变量其它水平之前）
+      add_ref_rows[[length(add_ref_rows)+1]] <- data.frame(
+        varname = mv,
+        Interval = ref_level,
+        Case_Total = paste0(cases_level, "/", n_level),
+        Incidence = incidence_level,
+        HR = 1.00,
+        HR_lower = 1.00,
+        HR_upper = 1.00,
+        P = NA_real_,
+        beta = 0.000,
+        se = 0.000,
+        stringsAsFactors = FALSE
+      )
+    }
+  }
+  if (length(add_ref_rows) > 0) {
+    ref_df <- do.call(rbind, add_ref_rows)
+    # 绑定后按变量名排序并保证参考水平在同变量其它水平之前
+    out <- rbind(ref_df, out)
+    rownames(out) <- NULL
+  }
   
   # 格式化输出，无须
   out$HR <- as.numeric(sprintf("%.2f", as.numeric(out$HR)))
