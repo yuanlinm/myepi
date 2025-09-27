@@ -9,7 +9,7 @@
 ## 安装与加载
 
 ```r
-# 首次安装或更新
+# 首次安装或更新，请在未加载R包的情况下直接运行以下代码
 if (!requireNamespace("devtools", quietly = TRUE)) install.packages("devtools")
 devtools::install_github("yuanlinm/myepi")
 library(myepi)
