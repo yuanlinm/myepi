@@ -144,11 +144,3 @@ A: 图形中展示的为格式化字符串，如需进一步计算，请使用�
 ## 引用
 如在研究或报告中使用本包，可在方法部分简单描述：
 “Statistical analyses were performed in R using the myepi package (GitHub: yuanlinm/myepi) for missing data profiling, Cox regression, subgroup and heterogeneity analyses, and forest plot visualization.”
-
----
-
-## 反馈
-提出改进建议或功能需求：公众号 **epi solution** 留言（请尽量附“使用场景 + 期望输出”）。
-
----
-
