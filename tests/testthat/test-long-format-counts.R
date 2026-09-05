@@ -42,6 +42,17 @@ test_that("cox_run keeps row-based behavior when idL is NULL", {
   expect_equal(result$Case_Total, sprintf("%d/%d", n_cases, nrow(long)))
 })
 
+test_that("repeated event rows are counted once with idL", {
+  data <- data.frame(
+    id = c(1, 1, 2, 2, 3, 3),
+    event = c(1, 1, 0, 0, 1, 1)
+  )
+
+  counts <- myepi:::.count_cases_total(data, event = "event", idL = "id")
+  expect_equal(counts$cases, 2)
+  expect_equal(counts$total, 3)
+})
+
 test_that("cox_run_sub deduplicates within each subgroup", {
   long <- make_long_lung()
   result <- cox_run_sub(
