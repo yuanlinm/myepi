@@ -10,24 +10,30 @@
 #' @param covars 协变量名（字符串向量，可为NULL）
 #' @param extra_vars 额外关注变量名（字符串向量，可为NULL）
 #' @param idL 长格式数据的个体标识变量名（字符串）。指定后，亚组病例数和总人数按该变量去重，人时仍按各观察区间累加。
+#' @param t_unit 随访时间单位：d=天（默认），y=年，m=月。用于将随访时长统一换算为人年后计算发病率。
+#' @param incidence_scale 发病率缩放倍数，默认 1e5（即每10万人年）。
 #' @param plot_shape 是否返回绘图友好格式（TRUE 返回分组标题 + 缩进结构；FALSE 返回原始长表, 后续异质性检验友好），默认 FALSE
 #' @param ... 传递给cox_run的其他参数
 #' @return 一个数据框：
 #'   - 当 plot_shape = FALSE：原始长表（每亚组一行）
 #'   - 当 plot_shape = TRUE：包含列 Group / Subgroup（Group 行为空 Subgroup，子行 Group 为空或缩进），便于直接用于森林图分面或分组标题展示
 #' @export
-cox_run_sub <- function(data, group_var, time1 = NULL, time2 = NULL, timediff = NULL, event, mainvar, covars = NULL, extra_vars = NULL, plot_shape = FALSE, idL = NULL, ...) {
+cox_run_sub <- function(data, group_var, time1 = NULL, time2 = NULL, timediff = NULL, event, mainvar, covars = NULL, extra_vars = NULL, plot_shape = FALSE, idL = NULL,
+                        t_unit = c("d", "y", "m"), incidence_scale = 1e5, ...) {
   if (!group_var %in% names(data)) stop("分组变量不在数据框中")
   .validate_idL(data, idL)
+  t_unit <- match.arg(t_unit)
+  unit_divisor <- switch(t_unit, d = 365.25, y = 1, m = 12)
   group_levels <- unique(data[[group_var]])
 
   res_list <- lapply(group_levels, function(g) {
     sub_data <- data[data[[group_var]] == g, , drop = FALSE]
     counts <- .count_cases_total(sub_data, event, idL)
     total_time <- .followup_time(sub_data, time1, time2, timediff)
-    total_py <- sum(total_time, na.rm = TRUE) / 365.25
+    total_time[!is.finite(total_time) | total_time < 0] <- NA_real_
+    total_py <- sum(total_time / unit_divisor, na.rm = TRUE)
     case_total <- sprintf("%d/%d", counts$cases, counts$total)
-    incidence <- if (total_py > 0) sprintf("%.2f", counts$cases / total_py * 1e5) else NA_character_
+    incidence <- if (total_py > 0) sprintf("%.2f", counts$cases / total_py * incidence_scale) else NA_character_
 
     res <- tryCatch({
       old_opt <- getOption("cox_run.print", TRUE)
@@ -43,6 +49,8 @@ cox_run_sub <- function(data, group_var, time1 = NULL, time2 = NULL, timediff = 
         covars = covars,
         extra_vars = extra_vars,
         idL = idL,
+        t_unit = t_unit,
+        incidence_scale = incidence_scale,
         ...
       )$result
     }, error = function(e) {

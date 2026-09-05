@@ -11,6 +11,8 @@
 #' @param event 结局变量名（字符串，0/1）
 #' @param covars 协变量名（字符串向量，可为NULL）
 #' @param idL 长格式数据的个体标识变量名（字符串）。指定后，各分组病例数和总人数按该变量去重，人时仍按各观察区间累加。
+#' @param t_unit 随访时间单位：d=天（默认），y=年，m=月。用于将随访时长统一换算为人年后计算发病率。
+#' @param incidence_scale 发病率缩放倍数，默认 1e5（即每10万人年）。
 #' @param trend 是否进行趋势性检验（逻辑值，默认 FALSE）。
 #' @param trend_method 趋势性检验方法："median" 使用各分组内原始连续变量的中位数构造连续变量；"ordinal" 使用 1,2,3,...,k 为分组得分。默认 "median"。
 #' @param ... 传递给cox_run的其他参数
@@ -22,8 +24,11 @@
 #'
 #' @return 一个数据框，包含分组Cox回归结果及（可选）趋势性检验列；同时带有属性 `quantile_breaks` 记录切分断点。
 #' @export
-cox_run_q <- function(data, mainvar, q = 3, time1 = NULL, time2 = NULL, timediff = NULL, event, covars = NULL, trend = FALSE, trend_method = c("median", "ordinal"), idL = NULL, ...) {
+cox_run_q <- function(data, mainvar, q = 3, time1 = NULL, time2 = NULL, timediff = NULL, event, covars = NULL, trend = FALSE, trend_method = c("median", "ordinal"), idL = NULL,
+                      t_unit = c("d", "y", "m"), incidence_scale = 1e5, ...) {
   trend_method <- match.arg(trend_method)
+  t_unit <- match.arg(t_unit)
+  unit_divisor <- switch(t_unit, d = 365.25, y = 1, m = 12)
   if (!mainvar %in% names(data)) stop("mainvar 不在数据框中")
   if (!is.numeric(data[[mainvar]])) stop("mainvar 必须为数值型")
   .validate_idL(data, idL)
@@ -65,6 +70,8 @@ cox_run_q <- function(data, mainvar, q = 3, time1 = NULL, time2 = NULL, timediff
     covars = covars,
     extra_vars = NULL,
     idL = idL,
+    t_unit = t_unit,
+    incidence_scale = incidence_scale,
     ...
   )
 
@@ -75,6 +82,8 @@ keep_idx <- grepl("^var_q.*_Q([2-9]|[1-9][0-9]+)$", rownames(coef_df))
     sub <- coef_df[keep_idx, , drop = FALSE]
     sub_varnames <- rownames(sub)
     total_time <- .followup_time(data, time1, time2, timediff)
+    total_time[!is.finite(total_time) | total_time < 0] <- NA_real_
+    total_py_vec <- total_time / unit_divisor
 
     group_info <- function(group_label, varname) {
       rows <- !is.na(var_q) & var_q == group_label
@@ -85,12 +94,12 @@ keep_idx <- grepl("^var_q.*_Q([2-9]|[1-9][0-9]+)$", rownames(coef_df))
       } else {
         NA_character_
       }
-      total_py <- sum(total_time[rows], na.rm = TRUE) / 365.25
+      total_py <- sum(total_py_vec[rows], na.rm = TRUE)
       data.frame(
         varname = varname,
         Interval = interval,
         Case_Total = sprintf("%d/%d", counts$cases, counts$total),
-        Incidence = if (total_py > 0) sprintf("%.2f", counts$cases / total_py * 1e5) else NA_character_,
+        Incidence = if (total_py > 0) sprintf("%.2f", counts$cases / total_py * incidence_scale) else NA_character_,
         stringsAsFactors = FALSE
       )
     }
