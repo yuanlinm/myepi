@@ -1,7 +1,7 @@
 Package: myepi
 Type: Package
 Title: Tools for Epidemiological Data Analysis and Visualization
-Version: 0.0.1
+Version: 0.0.2
 Author: Yuanlin Mou [aut, cre]
 Maintainer: Yuanlin Mou <your_email@example.com>
 Description: Provides functions to simplify epidemiological data analysis,
