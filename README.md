@@ -41,8 +41,11 @@ count_na(dat = df)
 cross_tb(dat = df, var = "sex", by = c("age_group"))
 
 # 3. 主效应 Cox
-m_main <- cox_run(df, time1 = "time_start", time1 = "time_end", event = "status", mainvar = "exposure", covars = c("age","sex"))
+m_main <- cox_run(df, time1 = "time_start", time2 = "time_end", event = "status", mainvar = "exposure", covars = c("age","sex"))
 head(m_main$result)
+
+# 长格式数据：病例数和总人数按 tmp_id 去重，人时仍累加所有观察区间
+m_long <- cox_run(df_long, time1 = "t_start", time2 = "t_stop", event = "status", mainvar = "exposure", covars = c("age","sex"), idL = "tmp_id")
 
 # 4. 连续变量按四分位 + 趋势检验
 q_res <- cox_run_q(df, mainvar = "BMI", q = 4, timediff = "time", event = "status", covars = c("age","sex"), trend = TRUE)
