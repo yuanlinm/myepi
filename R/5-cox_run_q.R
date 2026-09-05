@@ -70,7 +70,7 @@ cox_run_q <- function(data, mainvar, q = 3, time1 = NULL, time2 = NULL, timediff
 
   summ <- summary(res$model)
   coef_df <- as.data.frame(summ$coefficients)
-  keep_idx <- grepl("^var_q.*_Q[2-9][0-9]*$", rownames(coef_df))
+keep_idx <- grepl("^var_q.*_Q([2-9]|[1-9][0-9]+)$", rownames(coef_df))
   if (any(keep_idx)) {
     sub <- coef_df[keep_idx, , drop = FALSE]
     sub_varnames <- rownames(sub)
