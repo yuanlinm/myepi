@@ -12,7 +12,8 @@ cox_run(
   event,
   mainvar,
   covars = NULL,
-  extra_vars = NULL
+  extra_vars = NULL,
+  idL = NULL
 )
 }
 \arguments{
@@ -22,6 +23,8 @@ cox_run(
 
 \item{time2}{随访结束时间变量名（字符串）}
 
+\item{timediff}{生存时间变量名（字符串，可选）}
+
 \item{event}{结局变量名（字符串，0/1）}
 
 \item{mainvar}{关注变量名（字符串）}
@@ -29,6 +32,8 @@ cox_run(
 \item{covars}{协变量名（字符串向量，可为NULL）}
 
 \item{extra_vars}{额外关注变量名（字符串向量，可为NULL）}
+
+\item{idL}{长格式数据的个体标识变量名（字符串）。默认 NULL，按每行代表一名个体统计；指定后，Case_Total 中的病例数和总人数按该变量去重，Incidence 的病例数也按该变量去重，人时仍按各观察区间累加。}
 }
 \value{
 一个列表，包含模型对象和格式化结果表
