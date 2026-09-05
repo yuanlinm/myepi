@@ -42,6 +42,40 @@ test_that("cox_run keeps row-based behavior when idL is NULL", {
   expect_equal(result$Case_Total, sprintf("%d/%d", n_cases, nrow(long)))
 })
 
+test_that("cox_run incidence is consistent between day and year units", {
+  long_d <- make_long_lung()
+  long_y <- long_d
+  long_y$time1 <- long_y$time1 / 365.25
+  long_y$time2 <- long_y$time2 / 365.25
+
+  n_people <- length(unique(long_d$id))
+  n_cases <- length(unique(long_d$id[long_d$event == 1]))
+  expected_case_total <- sprintf("%d/%d", n_cases, n_people)
+
+  result_d <- cox_run(
+    long_d,
+    time1 = "time1",
+    time2 = "time2",
+    event = "event",
+    mainvar = "age",
+    idL = "id",
+    t_unit = "d"
+  )$result
+  result_y <- cox_run(
+    long_y,
+    time1 = "time1",
+    time2 = "time2",
+    event = "event",
+    mainvar = "age",
+    idL = "id",
+    t_unit = "y"
+  )$result
+
+  expect_equal(result_d$Case_Total, expected_case_total)
+  expect_equal(result_y$Case_Total, expected_case_total)
+  expect_equal(as.numeric(result_d$Incidence), as.numeric(result_y$Incidence), tolerance = 0.01)
+})
+
 test_that("repeated event rows are counted once with idL", {
   data <- data.frame(
     id = c(1, 1, 2, 2, 3, 3),

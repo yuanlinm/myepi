@@ -9,11 +9,15 @@
 #' @param covars 协变量名（字符串向量，可为NULL）
 #' @param extra_vars 额外关注变量名（字符串向量，可为NULL）
 #' @param idL 长格式数据的个体标识变量名（字符串）。默认 NULL，按每行代表一名个体统计；指定后，Case_Total 中的病例数和总人数按该变量去重，Incidence 的病例数也按该变量去重，人时仍按各观察区间累加。
+#' @param t_unit 随访时间单位：d=天（默认），y=年，m=月。用于将随访时长统一换算为人年后计算发病率。
+#' @param incidence_scale 发病率缩放倍数，默认 1e5（即每10万人年）。
 #' @return 一个列表，包含模型对象和格式化结果表
 #' @export
-cox_run <- function(data, time1 = NULL, time2 = NULL, timediff = NULL, event, mainvar, covars = NULL, extra_vars = NULL, idL = NULL) {
+cox_run <- function(data, time1 = NULL, time2 = NULL, timediff = NULL, event, mainvar, covars = NULL, extra_vars = NULL, idL = NULL,
+                    t_unit = c("d", "y", "m"), incidence_scale = 1e5) {
   if (!requireNamespace("survival", quietly = TRUE)) stop("请先安装 survival 包")
   .validate_idL(data, idL)
+  t_unit <- match.arg(t_unit)
 
   extract_vars <- function(x) {
     if (is.null(x)) return(character(0))
@@ -63,6 +67,9 @@ cox_run <- function(data, time1 = NULL, time2 = NULL, timediff = NULL, event, ma
   if (!is.null(extra_vars)) var_match <- unique(c(var_match, extra_vars[extra_vars %in% res$varname]))
   out <- res[res$varname %in% var_match, c("varname", "HR", "HR_lower", "HR_upper", "P", "beta", "se"), drop = FALSE]
   time_vec <- .followup_time(data, time1, time2, timediff)
+  time_vec[!is.finite(time_vec) | time_vec < 0] <- NA_real_
+  unit_divisor <- switch(t_unit, d = 365.25, y = 1, m = 12)
+  time_py <- time_vec / unit_divisor
 
   calculate_descriptive_stats <- function(varname) {
     base_var <- varname
@@ -82,8 +89,8 @@ cox_run <- function(data, time1 = NULL, time2 = NULL, timediff = NULL, event, ma
     if (is.numeric(x) && !is.factor(x)) {
       rows <- !is.na(x)
       counts <- .count_cases_total(data, event, idL, rows)
-      person_years <- sum(time_vec[rows], na.rm = TRUE)
-      incidence <- if (person_years > 0) sprintf("%.2f", counts$cases / (person_years / 365.25) * 1e5) else NA_character_
+      person_years <- sum(time_py[rows], na.rm = TRUE)
+      incidence <- if (person_years > 0) sprintf("%.2f", counts$cases / person_years * incidence_scale) else NA_character_
       interval <- if (any(rows)) {
         paste0(sprintf("%.2f", min(x[rows])), "-", sprintf("%.2f", max(x[rows])))
       } else {
@@ -110,8 +117,8 @@ cox_run <- function(data, time1 = NULL, time2 = NULL, timediff = NULL, event, ma
         as.character(x) == raw_level
       }
       counts <- .count_cases_total(data, event, idL, rows)
-      person_years <- sum(time_vec[rows], na.rm = TRUE)
-      incidence <- if (person_years > 0) sprintf("%.2f", counts$cases / (person_years / 365.25) * 1e5) else NA_character_
+      person_years <- sum(time_py[rows], na.rm = TRUE)
+      incidence <- if (person_years > 0) sprintf("%.2f", counts$cases / person_years * incidence_scale) else NA_character_
       return(list(
         interval = level_interval,
         case_total = paste0(counts$cases, "/", counts$total),
@@ -121,8 +128,8 @@ cox_run <- function(data, time1 = NULL, time2 = NULL, timediff = NULL, event, ma
 
     rows <- !is.na(x)
     counts <- .count_cases_total(data, event, idL, rows)
-    person_years <- sum(time_vec[rows], na.rm = TRUE)
-    incidence <- if (person_years > 0) sprintf("%.2f", counts$cases / (person_years / 365.25) * 1e5) else NA_character_
+    person_years <- sum(time_py[rows], na.rm = TRUE)
+    incidence <- if (person_years > 0) sprintf("%.2f", counts$cases / person_years * incidence_scale) else NA_character_
     list(
       interval = "-",
       case_total = paste0(counts$cases, "/", counts$total),
@@ -165,8 +172,8 @@ cox_run <- function(data, time1 = NULL, time2 = NULL, timediff = NULL, event, ma
       if (already_has) next
 
       counts <- .count_cases_total(data, event, idL, rows)
-      person_years <- sum(time_vec[rows], na.rm = TRUE)
-      incidence <- if (person_years > 0) sprintf("%.2f", counts$cases / (person_years / 365.25) * 1e5) else NA_character_
+      person_years <- sum(time_py[rows], na.rm = TRUE)
+      incidence <- if (person_years > 0) sprintf("%.2f", counts$cases / person_years * incidence_scale) else NA_character_
       add_ref_rows[[length(add_ref_rows) + 1L]] <- data.frame(
         varname = mv,
         Interval = ref_level,

@@ -16,6 +16,8 @@ cox_run_sub(
   extra_vars = NULL,
   plot_shape = FALSE,
   idL = NULL,
+  t_unit = c("d", "y", "m"),
+  incidence_scale = 1e+05,
   ...
 )
 }
@@ -39,6 +41,10 @@ cox_run_sub(
 \item{extra_vars}{额外关注变量名（字符串向量，可为NULL）}
 
 \item{idL}{长格式数据的个体标识变量名（字符串）。指定后，亚组病例数和总人数按该变量去重，人时仍按各观察区间累加。}
+
+\item{t_unit}{随访时间单位：d=天（默认），y=年，m=月。用于将随访时长统一换算为人年后计算发病率。}
+
+\item{incidence_scale}{发病率缩放倍数，默认 1e5（即每10万人年）。}
 
 \item{plot_shape}{是否返回绘图友好格式（TRUE 返回分组标题 + 缩进结构；FALSE 返回原始长表, 后续异质性检验友好），默认 FALSE}
 

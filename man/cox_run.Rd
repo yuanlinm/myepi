@@ -13,7 +13,9 @@ cox_run(
   mainvar,
   covars = NULL,
   extra_vars = NULL,
-  idL = NULL
+  idL = NULL,
+  t_unit = c("d", "y", "m"),
+  incidence_scale = 1e+05
 )
 }
 \arguments{
@@ -34,6 +36,10 @@ cox_run(
 \item{extra_vars}{额外关注变量名（字符串向量，可为NULL）}
 
 \item{idL}{长格式数据的个体标识变量名（字符串）。默认 NULL，按每行代表一名个体统计；指定后，Case_Total 中的病例数和总人数按该变量去重，Incidence 的病例数也按该变量去重，人时仍按各观察区间累加。}
+
+\item{t_unit}{随访时间单位：d=天（默认），y=年，m=月。用于将随访时长统一换算为人年后计算发病率。}
+
+\item{incidence_scale}{发病率缩放倍数，默认 1e5（即每10万人年）。}
 }
 \value{
 一个列表，包含模型对象和格式化结果表
