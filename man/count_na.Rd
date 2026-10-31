@@ -9,11 +9,12 @@ count_na(dat, group_var = NULL)
 \arguments{
 \item{dat}{A data frame to be checked for missing values.}
 
-\item{group_var}{(可选) 分组变量名（字符串），如指定则按该变量分组统计缺失。}
+\item{group_var}{(可选) 分组变量名（字符串），如指定则按该变量分组统计缺失；分组变量本身的缺失作为单独一组（Group 为 NA）。}
 }
 \value{
-一个数据框，包含变量、类型、缺失数、缺失率，若分组则每组一行。
+不可见地返回数据框：变量、（分组）、类型、样本量 N、缺失数、缺失率（%，原始精度），仅含存在缺失的变量，按整体缺失率降序。
+  无缺失时返回 0 行数据框并给出 message。
 }
 \description{
-report NAs as a ordered printed data frame
+report NAs as a ordered data frame
 }

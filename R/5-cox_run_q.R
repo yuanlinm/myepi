@@ -1,5 +1,9 @@
 #' 连续变量分位数Cox回归分析函数。
 #'
+#' 分位点在分析样本（完整病例）中计算；指定 idL 时按“个体 × 取值”去重后计算，避免随访区间多的个体权重过大。
+#' 分位点存在重复值（离散变量常见）时自动合并并给出警告。运行时以 message 报告各组样本量；
+#' 长格式数据中同一个体的不同记录可落入不同组，因此各组个体数之和可大于总个体数。
+#'
 #' @param data 数据框
 #' @param mainvar 连续变量名（字符串）
 #' @param q 分组定义：
@@ -8,200 +12,114 @@
 #' @param time1 随访开始时间变量名（字符串）
 #' @param time2 随访结束时间变量名（字符串）
 #' @param timediff 生存时间变量名（字符串，可选）
-#' @param event 结局变量名（字符串，0/1）
-#' @param covars 协变量名（字符串向量，可为NULL）
+#' @param event 结局变量名（字符串）。编码遵循 \code{survival::Surv}
+#' @param covars 协变量（字符串向量，可为NULL），写法同 \code{cox_run}
 #' @param idL 长格式数据的个体标识变量名（字符串）。指定后，各分组病例数和总人数按该变量去重，人时仍按各观察区间累加。
 #' @param t_unit 随访时间单位：d=天（默认），y=年，m=月。用于将随访时长统一换算为人年后计算发病率。
 #' @param incidence_scale 发病率缩放倍数，默认 1e5（即每10万人年）。
 #' @param trend 是否进行趋势性检验（逻辑值，默认 FALSE）。
 #' @param trend_method 趋势性检验方法："median" 使用各分组内原始连续变量的中位数构造连续变量；"ordinal" 使用 1,2,3,...,k 为分组得分。默认 "median"。
-#' @param ... 传递给cox_run的其他参数
+#' @param robust 方差估计，同 \code{cox_run}；趋势检验使用相同的方差设置
+#' @param conf_level 置信水平，默认 0.95
+#' @param ... 传递给 \code{survival::coxph} 的其他参数
 #'
 #' @details 当 `trend = TRUE` 时，会在结果表中新增两列：
 #' * `beta_trend`：趋势性检验中连续变量的回归系数（log(HR)），仅在结果表第一行显示。
 #' * `P_trend`：对应的显著性 P 值，仅在第一行显示。
-#' 若趋势性模型无法拟合（例如全部缺失或单一值），则两列返回 NA。
+#' 完整的趋势检验结果另见返回对象的 \code{trend} 元素。
 #'
-#' @return 一个数据框，包含分组Cox回归结果及（可选）趋势性检验列；同时带有属性 `quantile_breaks` 记录切分断点。
+#' @return 不可见地返回 \code{myepi_result} 对象：\code{model$main} 为分组模型，\code{model$trend} 为趋势模型，
+#'   \code{result} 为结果表（Interval 为区间定义，带属性 \code{quantile_breaks}），\code{breaks} 为实际断点，
+#'   \code{trend} 为趋势检验结果。
 #' @export
 cox_run_q <- function(data, mainvar, q = 3, time1 = NULL, time2 = NULL, timediff = NULL, event, covars = NULL, trend = FALSE, trend_method = c("median", "ordinal"), idL = NULL,
-                      t_unit = c("d", "y", "m"), incidence_scale = 1e5, ...) {
+                      t_unit = c("d", "y", "m"), incidence_scale = 1e5, robust = FALSE, conf_level = 0.95, ...) {
   trend_method <- match.arg(trend_method)
   t_unit <- match.arg(t_unit)
-  unit_divisor <- switch(t_unit, d = 365.25, y = 1, m = 12)
-  if (!mainvar %in% names(data)) stop("mainvar 不在数据框中")
+  .validate_conf_level(conf_level)
+  if (!is.character(mainvar) || length(mainvar) != 1L || !mainvar %in% names(data)) stop("mainvar 不在数据框中")
   if (!is.numeric(data[[mainvar]])) stop("mainvar 必须为数值型")
-  .validate_idL(data, idL)
-  x <- data[[mainvar]]
 
-  if (length(q) == 1) {
-    if (is.na(q) || q < 2) stop("当 q 为单个整数时需 >= 2")
-    q_int <- as.integer(q)
-    qs <- quantile(x, probs = seq(0, 1, length.out = q_int + 1), na.rm = TRUE)
-    qs[1] <- -Inf
-    qs[length(qs)] <- Inf
-    group_index <- cut(x, breaks = qs, labels = FALSE, include.lowest = TRUE, right = TRUE)
-    n_group <- q_int
+  prep0 <- .prep_cox(data, time1, time2, timediff, event, mainvar, covars, idL, robust)
+  ana <- prep0$data
+  x <- ana[[mainvar]]
+  # 分位点与组内中位数的计算单位：指定 idL 时为去重后的“个体 × 取值”
+  basis <- if (is.null(idL)) seq_along(x) else which(!duplicated(data.frame(ana[[idL]], x)))
+
+  if (length(q) == 1L) {
+    if (!is.numeric(q) || is.na(q) || q < 2 || q != round(q)) stop("当 q 为单个整数时需 >= 2")
+    breaks <- stats::quantile(x[basis], probs = seq(0, 1, length.out = q + 1), names = FALSE)
+    if (anyDuplicated(breaks)) {
+      breaks <- unique(breaks)
+      warning(sprintf("分位点存在重复值（%s 取值离散），合并后实际分为 %d 组", mainvar, length(breaks) - 1L), call. = FALSE)
+    }
   } else {
     if (!is.numeric(q)) stop("当 q 为向量时必须为数值型")
-    qs <- sort(unique(q))
-    if (length(qs) < 2) stop("自定义断点向量去重后长度需 >= 2")
-    if (any(x < qs[1] | x > qs[length(qs)], na.rm = TRUE)) {
+    breaks <- sort(unique(q))
+    if (any(x < breaks[1] | x > breaks[length(breaks)])) {
       stop("数据中存在超出自定义断点范围的值；请在 q 中包含该范围的边界（或添加更大/更小的端点）")
     }
-    if (any(diff(qs) <= 0)) stop("断点必须严格递增")
-    group_index <- cut(x, breaks = qs, labels = FALSE, include.lowest = TRUE, right = TRUE)
-    n_group <- length(qs) - 1
   }
+  if (length(breaks) < 2L) stop(sprintf("%s 只有一个取值，无法分组", mainvar))
 
-  labels_vec <- paste0(mainvar, "_Q", seq_len(n_group))
-  data$var_q <- factor(group_index, levels = seq_len(n_group), labels = labels_vec)
-  var_q <- data$var_q
-  old_opt <- getOption("cox_run.print", TRUE)
-  options(cox_run.print = FALSE)
-  on.exit(options(cox_run.print = old_opt), add = TRUE)
-  res <- cox_run(
-    data,
-    time1 = time1,
-    time2 = time2,
-    timediff = timediff,
-    event = event,
-    mainvar = "var_q",
-    covars = covars,
-    extra_vars = NULL,
-    idL = idL,
-    t_unit = t_unit,
-    incidence_scale = incidence_scale,
-    ...
-  )
+  intervals <- levels(cut(x, breaks = breaks, include.lowest = TRUE, right = TRUE, dig.lab = 4))
+  k <- length(intervals)
+  grp <- factor(cut(x, breaks = breaks, labels = FALSE, include.lowest = TRUE, right = TRUE),
+                levels = seq_len(k), labels = paste0("Q", seq_len(k)))
+  gname <- make.unique(c(names(ana), paste0(mainvar, "_q")))[ncol(ana) + 1L]
+  ana[[gname]] <- grp
 
-  summ <- summary(res$model)
-  coef_df <- as.data.frame(summ$coefficients)
-keep_idx <- grepl("^var_q.*_Q([2-9]|[1-9][0-9]+)$", rownames(coef_df))
-  if (any(keep_idx)) {
-    sub <- coef_df[keep_idx, , drop = FALSE]
-    sub_varnames <- rownames(sub)
-    total_time <- .followup_time(data, time1, time2, timediff)
-    total_time[!is.finite(total_time) | total_time < 0] <- NA_real_
-    total_py_vec <- total_time / unit_divisor
-
-    group_info <- function(group_label, varname) {
-      rows <- !is.na(var_q) & var_q == group_label
-      counts <- .count_cases_total(data, event, idL, rows)
-      values <- data[[mainvar]][rows]
-      interval <- if (length(values) > 0) {
-        sprintf("%.2f-%.2f", min(values, na.rm = TRUE), max(values, na.rm = TRUE))
-      } else {
-        NA_character_
-      }
-      total_py <- sum(total_py_vec[rows], na.rm = TRUE)
-      data.frame(
-        varname = varname,
-        Interval = interval,
-        Case_Total = sprintf("%d/%d", counts$cases, counts$total),
-        Incidence = if (total_py > 0) sprintf("%.2f", counts$cases / total_py * incidence_scale) else NA_character_,
-        stringsAsFactors = FALSE
-      )
-    }
-
-    ref_row <- cbind(
-      group_info(labels_vec[1], paste0("var_q", labels_vec[1])),
-      HR = 1.00,
-      HR_lower = 1.00,
-      HR_upper = 1.00,
-      P = 0.000,
-      beta = 0.000,
-      se = 0.000
-    )
-    out_info <- do.call(rbind, lapply(sub_varnames, function(varname) {
-      group_info(base::sub("^var_q", "", varname), varname)
-    }))
-    sub_out <- data.frame(
-      varname = sub_varnames,
-      HR = as.numeric(sprintf("%.2f", exp(sub$coef))),
-      HR_lower = as.numeric(sprintf("%.2f", exp(sub$coef - 1.96 * sub$`se(coef)`))),
-      HR_upper = as.numeric(sprintf("%.2f", exp(sub$coef + 1.96 * sub$`se(coef)`))),
-      P = as.numeric(sprintf("%.3f", sub$`Pr(>|z|)`)),
-      beta = as.numeric(sprintf("%.3f", sub$coef)),
-      se = as.numeric(sprintf("%.3f", sub$`se(coef)`)),
-      stringsAsFactors = FALSE
-    )
-    out_final <- merge(out_info, sub_out, by = "varname", sort = FALSE)
-    out_final <- rbind(ref_row, out_final)
-    attr(out_final, "quantile_breaks") <- qs
-    res$result <- out_final
-  } else {
-    empty_df <- data.frame(
-      varname = character(0),
-      Interval = character(0),
-      Case_Total = character(0),
-      Incidence = character(0),
-      HR = numeric(0),
-      HR_lower = numeric(0),
-      HR_upper = numeric(0),
-      P = numeric(0),
-      beta = numeric(0),
-      se = numeric(0),
-      stringsAsFactors = FALSE
-    )
-    attr(empty_df, "quantile_breaks") <- qs
-    res$result <- empty_df
+  sizes <- table(grp)
+  size_txt <- if (is.null(idL)) sprintf("%s %s: %d", names(sizes), intervals, as.integer(sizes)) else {
+    n_id <- vapply(levels(grp), function(l) length(unique(ana[[idL]][grp == l])), integer(1))
+    sprintf("%s %s: %d 行 / %d 人", names(sizes), intervals, as.integer(sizes), n_id)
   }
+  message(sprintf("%s 分为 %d 组，各组样本量：", mainvar, k), paste(size_txt, collapse = "；"))
+  empty <- names(sizes)[sizes == 0]
+  if (length(empty) > 0) warning("以下分组无观测: ", paste(empty, collapse = ", "), call. = FALSE)
 
-  if (trend && !is.null(res$result)) {
-    grp <- data$var_q
-    if (all(is.na(grp))) {
-      beta_tr <- NA_real_
-      p_tr <- NA_real_
+  prep <- .prep_cox(ana, time1, time2, timediff, event, gname, covars, idL, robust, quiet = TRUE)
+  fit <- .fit_cox(prep, ...)
+  vc <- .cox_vcov(fit, robust)
+  res <- .tidy_cox(prep, fit, vc, gname, NULL, t_unit, incidence_scale, conf_level)
+  res$varname <- paste0(mainvar, "_", res$Interval)
+  res$Interval <- intervals[match(res$Interval, levels(grp))]
+
+  fit_trend <- NULL
+  trend_tab <- NULL
+  if (isTRUE(trend)) {
+    score <- if (trend_method == "median") {
+      med <- tapply(x[basis], grp[basis], stats::median)
+      as.numeric(med[as.integer(grp)])
     } else {
-      score <- if (trend_method == "median") {
-        med_map <- tapply(x, grp, function(v) if (all(is.na(v))) NA_real_ else stats::median(v, na.rm = TRUE))
-        as.numeric(med_map[as.character(grp)])
-      } else {
-        as.numeric(grp)
-      }
-
-      if (all(is.na(score)) || length(unique(na.omit(score))) < 2) {
-        beta_tr <- NA_real_
-        p_tr <- NA_real_
-      } else {
-        surv_obj <- if (!is.null(timediff) && timediff %in% names(data)) {
-          survival::Surv(data[[timediff]], data[[event]])
-        } else if (!is.null(time1) && !is.null(time2) && time1 %in% names(data) && time2 %in% names(data)) {
-          survival::Surv(data[[time1]], data[[time2]], data[[event]])
-        } else {
-          stop("时间变量(time1/time2或timediff) 设置不完整，无法进行趋势检验")
-        }
-        f_trend <- if (is.null(covars)) {
-          as.formula("surv_obj ~ score")
-        } else {
-          as.formula(paste0("surv_obj ~ score + ", paste(covars, collapse = "+")))
-        }
-        fit_trend <- try(survival::coxph(f_trend, data = data.frame(data, score = score)), silent = TRUE)
-        if (inherits(fit_trend, "try-error")) {
-          beta_tr <- NA_real_
-          p_tr <- NA_real_
-        } else {
-          summ_tr <- summary(fit_trend)
-          if ("score" %in% rownames(summ_tr$coefficients)) {
-            beta_tr <- as.numeric(summ_tr$coefficients["score", "coef"])
-            p_tr <- as.numeric(summ_tr$coefficients["score", "Pr(>|z|)"])
-          } else {
-            beta_tr <- NA_real_
-            p_tr <- NA_real_
-          }
-        }
-      }
+      as.integer(grp)
     }
-
-    res$result$beta_trend <- NA_real_
-    res$result$P_trend <- NA_real_
-    if (nrow(res$result) > 0) {
-      res$result$beta_trend[1] <- if (!is.na(beta_tr)) round(beta_tr, 3) else NA_real_
-      res$result$P_trend[1] <- if (!is.na(p_tr)) round(p_tr, 3) else NA_real_
+    sname <- make.unique(c(names(ana), paste0(mainvar, "_trend")))[ncol(ana) + 1L]
+    ana[[sname]] <- score
+    if (length(unique(score)) < 2L) {
+      warning("趋势检验得分只有一个取值，无法拟合趋势模型", call. = FALSE)
+      trend_tab <- data.frame(method = trend_method, beta = NA_real_, se = NA_real_, P = NA_real_)
+    } else {
+      prep_t <- .prep_cox(ana, time1, time2, timediff, event, sname, covars, idL, robust, quiet = TRUE)
+      fit_trend <- .fit_cox(prep_t, ...)
+      wt <- .wald_table(fit_trend, .cox_vcov(fit_trend, robust), conf_level)
+      wt <- wt[match(sname, wt$coef_name), ]
+      trend_tab <- data.frame(method = trend_method, beta = wt$beta, se = wt$se, P = wt$P)
     }
+    res$beta_trend <- c(trend_tab$beta, rep(NA_real_, nrow(res) - 1L))
+    res$P_trend <- c(trend_tab$P, rep(NA_real_, nrow(res) - 1L))
   }
+  attr(res, "quantile_breaks") <- breaks
 
-  if (!is.null(res$result)) print(res$result, row.names = FALSE)
-  res$result
+  info <- .cox_info(prep, fit, vc, conf_level, t_unit, incidence_scale)
+  info$n_dropped <- prep0$n_drop
+  info$mainvar <- mainvar
+  info$header <- c(
+    sprintf("分组 Cox 回归: %s 分为 %d 组；断点 %s", mainvar, k, paste(format(breaks, digits = 4, trim = TRUE), collapse = ", ")),
+    sprintf("分析样本: %d 行，事件 %d（剔除缺失 %d 行）", fit$n, fit$nevent, prep0$n_drop),
+    info$header[2],
+    if (!is.null(trend_tab)) sprintf("趋势检验（%s 得分）: P = %s", trend_method, format.pval(trend_tab$P, digits = 3, eps = 0.001))
+  )
+  invisible(.new_result(model = list(main = fit, trend = fit_trend), result = res,
+                        breaks = breaks, trend = trend_tab, info = info))
 }

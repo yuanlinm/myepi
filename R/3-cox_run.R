@@ -1,206 +1,55 @@
 #' 常规Cox回归分析函数，本函数支持基本的Cox回归分析和时间依赖（长数据）变量的Cox回归分析。
 #'
+#' 拟合前按完整病例（所有模型变量及 idL 无缺失）生成分析样本，并以 message 报告缺失处理结果；
+#' 结果表中的事件数、人数、人年与发病率均基于该分析样本，与模型一致。
+#' 结果表保存原始精度数值，显示时由 \code{print()} 格式化。
+#'
 #' @param data 数据框
 #' @param time1 随访开始时间变量名（字符串）
 #' @param time2 随访结束时间变量名（字符串）
 #' @param timediff 生存时间变量名（字符串，可选）
-#' @param event 结局变量名（字符串，0/1）
-#' @param mainvar 关注变量名（字符串）
-#' @param covars 协变量名（字符串向量，可为NULL）
-#' @param extra_vars 额外关注变量名（字符串向量，可为NULL）
-#' @param idL 长格式数据的个体标识变量名（字符串）。默认 NULL，按每行代表一名个体统计；指定后，Case_Total 中的病例数和总人数按该变量去重，Incidence 的病例数也按该变量去重，人时仍按各观察区间累加。
+#' @param event 结局变量名（字符串）。编码遵循 \code{survival::Surv}：0/1、TRUE/FALSE 或 1/2（2 为事件）
+#' @param mainvar 关注变量名（字符串向量）。数值型输出一行；因子/字符型输出参照水平与各水平
+#' @param covars 协变量（字符串向量，可为NULL）。列名按变量处理；也可写表达式，如 \code{"strata(center)"}、
+#'   \code{"cluster(id)"}、\code{"pspline(age, df = 3)"}、\code{"a*b"}
+#' @param extra_vars 额外输出的项（字符串向量，可为NULL）。若为 covars 中的列名则与 mainvar 同样输出（含描述统计）；
+#'   否则按模型项名（如 \code{"x:z"}）或系数名匹配，仅输出效应量
+#' @param idL 长格式数据的个体标识变量名（字符串）。默认 NULL，按每行代表一名个体统计；指定后，病例数和总人数按该变量去重，Incidence 的病例数也按该变量去重，人时仍按各观察区间累加。
 #' @param t_unit 随访时间单位：d=天（默认），y=年，m=月。用于将随访时长统一换算为人年后计算发病率。
 #' @param incidence_scale 发病率缩放倍数，默认 1e5（即每10万人年）。
-#' @return 一个列表，包含模型对象和格式化结果表
+#' @param robust 方差估计，必须由用户明确指定：FALSE（默认）使用模型方差，此时 covars 中的 \code{cluster()} 被忽略；
+#'   TRUE 使用稳健（三明治）方差，按 \code{cluster()} 聚类，未写 \code{cluster()} 但指定了 idL 时按 idL 聚类。
+#'   系数、CI、P 值与所有检验均基于所选方差。
+#' @param conf_level 置信水平，默认 0.95
+#' @param ... 传递给 \code{survival::coxph} 的其他参数（如 \code{ties}）
+#' @return 不可见地返回 \code{myepi_result} 对象（列表）：\code{model} 为 coxph 模型，\code{result} 为结果表，
+#'   \code{info} 为样本与设置信息。用 \code{print()} 查看。
 #' @export
 cox_run <- function(data, time1 = NULL, time2 = NULL, timediff = NULL, event, mainvar, covars = NULL, extra_vars = NULL, idL = NULL,
-                    t_unit = c("d", "y", "m"), incidence_scale = 1e5) {
-  if (!requireNamespace("survival", quietly = TRUE)) stop("请先安装 survival 包")
-  .validate_idL(data, idL)
+                    t_unit = c("d", "y", "m"), incidence_scale = 1e5, robust = FALSE, conf_level = 0.95, ...) {
   t_unit <- match.arg(t_unit)
+  .validate_conf_level(conf_level)
+  extra <- .split_extra(extra_vars, data, covars)
 
-  extract_vars <- function(x) {
-    if (is.null(x)) return(character(0))
-    strata_vars <- unlist(regmatches(x, gregexpr("strata\\(([^)]+)\\)", x)))
-    strata_vars <- gsub("strata\\(([^)]+)\\)", "\\1", strata_vars)
-    cluster_vars <- unlist(regmatches(x, gregexpr("cluster\\(([^)]+)\\)", x)))
-    cluster_vars <- gsub("cluster\\(([^)]+)\\)", "\\1", cluster_vars)
-    tmp <- gsub("strata\\(([^)]+)\\)", "", x)
-    tmp <- gsub("cluster\\(([^)]+)\\)", "", tmp)
-    other_vars <- unlist(strsplit(tmp, ":|\\*|/|\\^|\\+"))
-    all_vars <- trimws(c(strata_vars, cluster_vars, other_vars))
-    all_vars[all_vars != ""]
-  }
+  prep <- .prep_cox(data, time1, time2, timediff, event, mainvar, covars, idL, robust)
+  fit <- .fit_cox(prep, ...)
+  vc <- .cox_vcov(fit, robust)
+  res <- .tidy_cox(prep, fit, vc, c(mainvar, extra$focus), extra$coef, t_unit, incidence_scale, conf_level)
 
-  if (!is.null(timediff)) {
-    check_vars <- unique(c(timediff, event, mainvar, unlist(lapply(covars, extract_vars))))
-    if (!all(check_vars %in% names(data))) stop("部分变量不在数据框中")
-    surv_str <- paste0("survival::Surv(", timediff, ", ", event, ")")
-  } else {
-    check_vars <- unique(c(time1, time2, event, mainvar, unlist(lapply(covars, extract_vars))))
-    if (!all(check_vars %in% names(data))) stop("部分变量不在数据框中")
-    surv_str <- paste0("survival::Surv(", time1, ", ", time2, ", ", event, ")")
-  }
+  info <- .cox_info(prep, fit, vc, conf_level, t_unit, incidence_scale)
+  info$header <- c("Cox 回归", info$header)
+  invisible(.new_result(model = fit, result = res, info = info))
+}
 
-  rhs_str <- paste(c(mainvar, covars), collapse = "+")
-  fml <- as.formula(paste0(surv_str, " ~ ", rhs_str))
-  fit <- if (any(grepl("cluster\\(", rhs_str))) {
-    survival::coxph(fml, data = data, robust = TRUE)
-  } else {
-    survival::coxph(fml, data = data)
-  }
-
-  summ <- summary(fit)
-  conf <- as.data.frame(summ$conf.int)
-  res <- as.data.frame(summ$coefficients)
-  res$HR <- exp(res$coef)
-  res$HR_lower <- conf$`lower .95`
-  res$HR_upper <- conf$`upper .95`
-  res$P <- res$`Pr(>|z|)`
-  res$beta <- res$coef
-  res$se <- res$`se(coef)`
-  res$varname <- rownames(res)
-
-  var_match <- unique(unlist(lapply(mainvar, function(v) {
-    grep(paste0("^", v, "$|^", v, ".+$"), res$varname, value = TRUE)
-  })))
-  if (!is.null(extra_vars)) var_match <- unique(c(var_match, extra_vars[extra_vars %in% res$varname]))
-  out <- res[res$varname %in% var_match, c("varname", "HR", "HR_lower", "HR_upper", "P", "beta", "se"), drop = FALSE]
-  time_vec <- .followup_time(data, time1, time2, timediff)
-  time_vec[!is.finite(time_vec) | time_vec < 0] <- NA_real_
-  unit_divisor <- switch(t_unit, d = 365.25, y = 1, m = 12)
-  time_py <- time_vec / unit_divisor
-
-  calculate_descriptive_stats <- function(varname) {
-    base_var <- varname
-    is_factor_level <- FALSE
-    for (mv in mainvar) {
-      if (varname != mv && startsWith(varname, mv)) {
-        base_var <- mv
-        is_factor_level <- TRUE
-        break
-      }
-    }
-    if (!base_var %in% names(data)) {
-      return(list(interval = NA_character_, case_total = NA_character_, incidence = NA_character_))
-    }
-
-    x <- data[[base_var]]
-    if (is.numeric(x) && !is.factor(x)) {
-      rows <- !is.na(x)
-      counts <- .count_cases_total(data, event, idL, rows)
-      person_years <- sum(time_py[rows], na.rm = TRUE)
-      incidence <- if (person_years > 0) sprintf("%.2f", counts$cases / person_years * incidence_scale) else NA_character_
-      interval <- if (any(rows)) {
-        paste0(sprintf("%.2f", min(x[rows])), "-", sprintf("%.2f", max(x[rows])))
-      } else {
-        NA_character_
-      }
-      return(list(
-        interval = interval,
-        case_total = paste0(counts$cases, "/", counts$total),
-        incidence = incidence
-      ))
-    }
-
-    if (is_factor_level) {
-      raw_level <- sub(paste0("^", base_var), "", varname)
-      if (is.factor(x) && grepl("^[0-9]+$", raw_level)) {
-        idx <- suppressWarnings(as.integer(raw_level))
-        level_interval <- if (!is.na(idx) && idx >= 1 && idx <= length(levels(x))) levels(x)[idx] else raw_level
-      } else {
-        level_interval <- raw_level
-      }
-      rows <- if (is.factor(x)) {
-        if (level_interval %in% levels(x)) x == level_interval else x == raw_level
-      } else {
-        as.character(x) == raw_level
-      }
-      counts <- .count_cases_total(data, event, idL, rows)
-      person_years <- sum(time_py[rows], na.rm = TRUE)
-      incidence <- if (person_years > 0) sprintf("%.2f", counts$cases / person_years * incidence_scale) else NA_character_
-      return(list(
-        interval = level_interval,
-        case_total = paste0(counts$cases, "/", counts$total),
-        incidence = incidence
-      ))
-    }
-
-    rows <- !is.na(x)
-    counts <- .count_cases_total(data, event, idL, rows)
-    person_years <- sum(time_py[rows], na.rm = TRUE)
-    incidence <- if (person_years > 0) sprintf("%.2f", counts$cases / person_years * incidence_scale) else NA_character_
-    list(
-      interval = "-",
-      case_total = paste0(counts$cases, "/", counts$total),
-      incidence = incidence
+.cox_info <- function(prep, fit, vc, conf_level, t_unit, incidence_scale) {
+  list(
+    n_input = prep$n_input, n_dropped = prep$n_drop, n = fit$n, nevent = fit$nevent,
+    variance = vc$type, conf_level = conf_level, t_unit = t_unit, incidence_scale = incidence_scale,
+    header = c(
+      sprintf("分析样本: %d 行，事件 %d（剔除缺失 %d 行）", fit$n, fit$nevent, prep$n_drop),
+      sprintf("方差估计: %s；置信水平: %g%%；发病率单位: 每 %s 人年",
+              if (vc$type == "robust") "稳健（三明治）方差" else "模型方差",
+              100 * conf_level, format(incidence_scale, big.mark = ",", scientific = FALSE))
     )
-  }
-
-  descriptive_stats <- lapply(out$varname, calculate_descriptive_stats)
-  out$Interval <- vapply(descriptive_stats, `[[`, character(1), "interval")
-  out$Case_Total <- vapply(descriptive_stats, `[[`, character(1), "case_total")
-  out$Incidence <- vapply(descriptive_stats, `[[`, character(1), "incidence")
-  out$varname_clean <- vapply(out$varname, function(varname) {
-    base_var <- varname
-    for (main_v in mainvar) {
-      if (varname != main_v && startsWith(varname, main_v)) {
-        base_var <- main_v
-        break
-      }
-    }
-    base_var
-  }, character(1))
-
-  out <- out[, c("varname_clean", "Interval", "Case_Total", "Incidence", "HR", "HR_lower", "HR_upper", "P", "beta", "se")]
-  names(out)[1] <- "varname"
-
-  add_ref_rows <- list()
-  for (mv in mainvar) {
-    if (!mv %in% names(data)) next
-    x <- data[[mv]]
-    if (is.factor(x) || is.character(x)) {
-      if (is.factor(x)) {
-        ref_level <- levels(x)[1]
-        rows <- x == ref_level
-      } else {
-        ref_level <- sort(unique(x[!is.na(x)]))[1]
-        rows <- x == ref_level
-      }
-      already_has <- any(grepl(paste0("^", mv, ref_level, "$"), out$varname)) ||
-        any(out$varname == mv & out$Interval == ref_level)
-      if (already_has) next
-
-      counts <- .count_cases_total(data, event, idL, rows)
-      person_years <- sum(time_py[rows], na.rm = TRUE)
-      incidence <- if (person_years > 0) sprintf("%.2f", counts$cases / person_years * incidence_scale) else NA_character_
-      add_ref_rows[[length(add_ref_rows) + 1L]] <- data.frame(
-        varname = mv,
-        Interval = ref_level,
-        Case_Total = paste0(counts$cases, "/", counts$total),
-        Incidence = incidence,
-        HR = 1.00,
-        HR_lower = 1.00,
-        HR_upper = 1.00,
-        P = NA_real_,
-        beta = 0.000,
-        se = 0.000,
-        stringsAsFactors = FALSE
-      )
-    }
-  }
-  if (length(add_ref_rows) > 0) {
-    out <- rbind(do.call(rbind, add_ref_rows), out)
-    rownames(out) <- NULL
-  }
-
-  out$HR <- as.numeric(sprintf("%.2f", as.numeric(out$HR)))
-  out$HR_lower <- as.numeric(sprintf("%.2f", as.numeric(out$HR_lower)))
-  out$HR_upper <- as.numeric(sprintf("%.2f", as.numeric(out$HR_upper)))
-  out$P <- as.numeric(out$P)
-  out$beta <- as.numeric(sprintf("%.3f", as.numeric(out$beta)))
-  out$se <- as.numeric(sprintf("%.3f", as.numeric(out$se)))
-  rownames(out) <- NULL
-  if (isTRUE(getOption("cox_run.print", TRUE))) print(out, row.names = FALSE)
-  invisible(list(model = fit, result = out))
+  )
 }

@@ -15,7 +15,10 @@ cox_run(
   extra_vars = NULL,
   idL = NULL,
   t_unit = c("d", "y", "m"),
-  incidence_scale = 1e+05
+  incidence_scale = 1e+05,
+  robust = FALSE,
+  conf_level = 0.95,
+  ...
 )
 }
 \arguments{
@@ -27,23 +30,36 @@ cox_run(
 
 \item{timediff}{生存时间变量名（字符串，可选）}
 
-\item{event}{结局变量名（字符串，0/1）}
+\item{event}{结局变量名（字符串）。编码遵循 \code{survival::Surv}：0/1、TRUE/FALSE 或 1/2（2 为事件）}
 
-\item{mainvar}{关注变量名（字符串）}
+\item{mainvar}{关注变量名（字符串向量）。数值型输出一行；因子/字符型输出参照水平与各水平}
 
-\item{covars}{协变量名（字符串向量，可为NULL）}
+\item{covars}{协变量（字符串向量，可为NULL）。列名按变量处理；也可写表达式，如 \code{"strata(center)"}、
+\code{"cluster(id)"}、\code{"pspline(age, df = 3)"}、\code{"a*b"}}
 
-\item{extra_vars}{额外关注变量名（字符串向量，可为NULL）}
+\item{extra_vars}{额外输出的项（字符串向量，可为NULL）。若为 covars 中的列名则与 mainvar 同样输出（含描述统计）；
+否则按模型项名（如 \code{"x:z"}）或系数名匹配，仅输出效应量}
 
-\item{idL}{长格式数据的个体标识变量名（字符串）。默认 NULL，按每行代表一名个体统计；指定后，Case_Total 中的病例数和总人数按该变量去重，Incidence 的病例数也按该变量去重，人时仍按各观察区间累加。}
+\item{idL}{长格式数据的个体标识变量名（字符串）。默认 NULL，按每行代表一名个体统计；指定后，病例数和总人数按该变量去重，Incidence 的病例数也按该变量去重，人时仍按各观察区间累加。}
 
 \item{t_unit}{随访时间单位：d=天（默认），y=年，m=月。用于将随访时长统一换算为人年后计算发病率。}
 
 \item{incidence_scale}{发病率缩放倍数，默认 1e5（即每10万人年）。}
+
+\item{robust}{方差估计，必须由用户明确指定：FALSE（默认）使用模型方差，此时 covars 中的 \code{cluster()} 被忽略；
+TRUE 使用稳健（三明治）方差，按 \code{cluster()} 聚类，未写 \code{cluster()} 但指定了 idL 时按 idL 聚类。
+系数、CI、P 值与所有检验均基于所选方差。}
+
+\item{conf_level}{置信水平，默认 0.95}
+
+\item{...}{传递给 \code{survival::coxph} 的其他参数（如 \code{ties}）}
 }
 \value{
-一个列表，包含模型对象和格式化结果表
+不可见地返回 \code{myepi_result} 对象（列表）：\code{model} 为 coxph 模型，\code{result} 为结果表，
+  \code{info} 为样本与设置信息。用 \code{print()} 查看。
 }
 \description{
-常规Cox回归分析函数，本函数支持基本的Cox回归分析和时间依赖（长数据）变量的Cox回归分析。
+拟合前按完整病例（所有模型变量及 idL 无缺失）生成分析样本，并以 message 报告缺失处理结果；
+结果表中的事件数、人数、人年与发病率均基于该分析样本，与模型一致。
+结果表保存原始精度数值，显示时由 \code{print()} 格式化。
 }
