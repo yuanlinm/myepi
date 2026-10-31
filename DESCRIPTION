@@ -20,6 +20,8 @@ Imports:
     tools,
     utils
 Suggests:
+    Hmisc,
+    rms,
     systemfonts,
     testthat (>= 3.0.0)
 Config/testthat/edition: 3

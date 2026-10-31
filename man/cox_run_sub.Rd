@@ -18,7 +18,7 @@ cox_run_sub(
   idL = NULL,
   t_unit = c("d", "y", "m"),
   incidence_scale = 1e+05,
-  robust = NULL,
+  robust = FALSE,
   conf_level = 0.95,
   group_na = c("drop", "keep"),
   interaction = TRUE,

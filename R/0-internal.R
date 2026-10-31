@@ -19,8 +19,8 @@
 }
 
 .validate_robust <- function(robust) {
-  if (!is.null(robust) && !isTRUE(robust) && !isFALSE(robust)) {
-    stop("robust 只能为 NULL（自动）、TRUE（稳健方差）或 FALSE（模型方差）")
+  if (!isTRUE(robust) && !isFALSE(robust)) {
+    stop("robust 只能为 FALSE（模型方差，默认）或 TRUE（稳健方差）")
   }
   invisible(NULL)
 }
@@ -43,10 +43,11 @@
   switch(t_unit, d = 365.25, y = 1, m = 12)
 }
 
-# 构建公式、校验变量与随访时间、按完整病例生成分析样本，并报告缺失处理结果
+# 构建公式、校验变量与随访时间、按完整病例生成分析样本，并报告缺失处理结果。
+# 方差只由 robust 决定：robust = FALSE 时忽略 cluster() 项；main_term 可将 mainvar 替换为样条等项
 .prep_cox <- function(data, time1 = NULL, time2 = NULL, timediff = NULL, event,
-                      mainvar, covars = NULL, idL = NULL, robust = NULL,
-                      label = NULL, quiet = FALSE) {
+                      mainvar, covars = NULL, idL = NULL, robust = FALSE,
+                      label = NULL, quiet = FALSE, main_term = NULL) {
   if (!is.data.frame(data)) stop("data 必须为数据框")
   data <- as.data.frame(data)
   .validate_idL(data, idL)
@@ -67,7 +68,14 @@
 
   for (v in mainvar) if (is.logical(data[[v]])) data[[v]] <- factor(data[[v]], levels = c(FALSE, TRUE))
 
-  rhs <- c(.bt(mainvar), vapply(covars, .term_label, character(1), data = data, USE.NAMES = FALSE))
+  is_cluster <- grepl("^\\s*cluster\\s*\\(", covars)
+  if (any(is_cluster) && !isTRUE(robust)) {
+    if (!quiet) .msg(label, "robust = FALSE：忽略 ", paste(covars[is_cluster], collapse = ", "),
+                     "，使用模型方差（如需稳健方差请设置 robust = TRUE）")
+    covars <- covars[!is_cluster]
+  }
+  main <- if (is.null(main_term)) .bt(mainvar) else main_term
+  rhs <- c(main, vapply(covars, .term_label, character(1), data = data, USE.NAMES = FALSE))
   fml <- stats::reformulate(rhs, response = str2lang(lhs))
   has_cluster <- !is.null(attr(stats::terms(fml, specials = "cluster"), "specials")$cluster)
   if (isTRUE(robust) && !has_cluster && !is.null(idL)) {
@@ -114,7 +122,7 @@
   }
 
   list(
-    formula = fml, data = ana, y = y, status = y[, "status"], time = time,
+    formula = fml, data = ana, y = y, status = y[, "status"], time = time, lhs = lhs, covars = covars,
     idL = idL, robust = robust, has_cluster = has_cluster,
     n_input = n_input, n_drop = n_drop
   )
@@ -129,11 +137,10 @@
   }
 }
 
-# 方差选择：robust = NULL 时沿用 survival 的默认（含 cluster() 即为稳健方差）；TRUE/FALSE 由用户指定
-.cox_vcov <- function(fit, robust = NULL) {
-  has_robust <- !is.null(fit$naive.var)
-  use_robust <- if (is.null(robust)) has_robust else robust
-  V <- if (use_robust) fit$var else if (has_robust) fit$naive.var else fit$var
+# 方差只由用户的 robust 设定决定：TRUE 为稳健方差，FALSE 为模型方差
+.cox_vcov <- function(fit, robust = FALSE) {
+  use_robust <- isTRUE(robust)
+  V <- if (use_robust || is.null(fit$naive.var)) fit$var else fit$naive.var
   list(V = V, type = if (use_robust) "robust" else "model")
 }
 
@@ -267,7 +274,22 @@
 #' @export
 print.myepi_result <- function(x, digits = 2, ...) {
   if (length(x$info$header) > 0) cat(paste0(x$info$header, "\n"), sep = "")
-  r <- x$result
+  if (is.data.frame(x$tests)) {
+    cat("\n检验:\n")
+    .print_table(x$tests, digits)
+    cat("\n")
+  }
+  .print_table(x$result, digits)
+  invisible(x)
+}
+
+.print_table <- function(r, digits, max_rows = 20L) {
+  if (is.data.frame(r) && nrow(r) > max_rows) {
+    n <- nrow(r)
+    .print_table(r[c(1:5, (n - 4):n), , drop = FALSE], digits, max_rows)
+    cat(sprintf("…… 共 %d 行，仅显示首尾各 5 行（完整数据见 $result）\n", n))
+    return(invisible(NULL))
+  }
   if (is.data.frame(r) && nrow(r) > 0) {
     fmt_fixed <- function(v, d) ifelse(is.na(v), NA_character_, formatC(v, format = "f", digits = d))
     for (col in names(r)) {
@@ -278,7 +300,7 @@ print.myepi_result <- function(x, digits = 2, ...) {
         ifelse(is.na(v), NA_character_, format.pval(v, digits = digits, eps = 0.001))
       } else if (col %in% c("N_event", "N_total", "n", "k", "Missing", "N", "Q_df")) {
         ifelse(is.na(v), NA_character_, format(v, trim = TRUE))
-      } else if (col %in% c("beta", "se", "beta_trend", "tau2")) {
+      } else if (col %in% c("beta", "se", "beta_trend", "tau2", "statistic", "df", "x")) {
         fmt_fixed(v, digits + 1)
       } else {
         fmt_fixed(v, digits)
@@ -288,5 +310,5 @@ print.myepi_result <- function(x, digits = 2, ...) {
   } else {
     cat("（结果为空）\n")
   }
-  invisible(x)
+  invisible(NULL)
 }

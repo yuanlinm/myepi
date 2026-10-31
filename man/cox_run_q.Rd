@@ -18,7 +18,7 @@ cox_run_q(
   idL = NULL,
   t_unit = c("d", "y", "m"),
   incidence_scale = 1e+05,
-  robust = NULL,
+  robust = FALSE,
   conf_level = 0.95,
   ...
 )

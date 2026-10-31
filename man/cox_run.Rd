@@ -16,7 +16,7 @@ cox_run(
   idL = NULL,
   t_unit = c("d", "y", "m"),
   incidence_scale = 1e+05,
-  robust = NULL,
+  robust = FALSE,
   conf_level = 0.95,
   ...
 )
@@ -46,9 +46,9 @@ cox_run(
 
 \item{incidence_scale}{发病率缩放倍数，默认 1e5（即每10万人年）。}
 
-\item{robust}{方差估计：NULL（默认，含 \code{cluster()} 时用稳健方差，否则用模型方差）；
-TRUE 使用稳健（三明治）方差（未写 \code{cluster()} 但指定了 idL 时按 idL 聚类）；
-FALSE 使用模型方差。CI 与 P 值均基于所选方差。}
+\item{robust}{方差估计，必须由用户明确指定：FALSE（默认）使用模型方差，此时 covars 中的 \code{cluster()} 被忽略；
+TRUE 使用稳健（三明治）方差，按 \code{cluster()} 聚类，未写 \code{cluster()} 但指定了 idL 时按 idL 聚类。
+系数、CI、P 值与所有检验均基于所选方差。}
 
 \item{conf_level}{置信水平，默认 0.95}
 

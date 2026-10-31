@@ -33,7 +33,7 @@
 #'   \code{trend} 为趋势检验结果。
 #' @export
 cox_run_q <- function(data, mainvar, q = 3, time1 = NULL, time2 = NULL, timediff = NULL, event, covars = NULL, trend = FALSE, trend_method = c("median", "ordinal"), idL = NULL,
-                      t_unit = c("d", "y", "m"), incidence_scale = 1e5, robust = NULL, conf_level = 0.95, ...) {
+                      t_unit = c("d", "y", "m"), incidence_scale = 1e5, robust = FALSE, conf_level = 0.95, ...) {
   trend_method <- match.arg(trend_method)
   t_unit <- match.arg(t_unit)
   .validate_conf_level(conf_level)

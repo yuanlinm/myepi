@@ -29,7 +29,7 @@
 #'   plot_shape = TRUE 时包含列 Group / Subgroup（标题行为空 Subgroup），便于森林图展示。
 #' @export
 cox_run_sub <- function(data, group_var, time1 = NULL, time2 = NULL, timediff = NULL, event, mainvar, covars = NULL, extra_vars = NULL, plot_shape = FALSE, idL = NULL,
-                        t_unit = c("d", "y", "m"), incidence_scale = 1e5, robust = NULL, conf_level = 0.95,
+                        t_unit = c("d", "y", "m"), incidence_scale = 1e5, robust = FALSE, conf_level = 0.95,
                         group_na = c("drop", "keep"), interaction = TRUE, ...) {
   t_unit <- match.arg(t_unit)
   group_na <- match.arg(group_na)
@@ -125,7 +125,7 @@ cox_run_sub <- function(data, group_var, time1 = NULL, time2 = NULL, timediff = 
   prep <- .prep_cox(data, time1, time2, timediff, event, mainvar, c(covars, group_var), idL, robust,
                     label = "交互检验")
   fit0 <- .fit_cox(prep, ...)
-  use_robust <- .cox_vcov(fit0, robust)$type == "robust"
+  use_robust <- isTRUE(robust)
   models <- list()
   tab <- lapply(mainvar, function(mv) {
     inter_term <- paste0(.bt(mv), ":", .bt(group_var))
