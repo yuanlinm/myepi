@@ -18,6 +18,10 @@ cox_run_sub(
   idL = NULL,
   t_unit = c("d", "y", "m"),
   incidence_scale = 1e+05,
+  robust = NULL,
+  conf_level = 0.95,
+  group_na = c("drop", "keep"),
+  interaction = TRUE,
   ...
 )
 }
@@ -32,13 +36,15 @@ cox_run_sub(
 
 \item{timediff}{生存时间变量名（字符串，可选）}
 
-\item{event}{结局变量名（字符串，0/1）}
+\item{event}{结局变量名（字符串）。编码遵循 \code{survival::Surv}}
 
-\item{mainvar}{关注变量名（字符串）}
+\item{mainvar}{关注变量名（字符串向量）}
 
-\item{covars}{协变量名（字符串向量，可为NULL）}
+\item{covars}{协变量（字符串向量，可为NULL），写法同 \code{cox_run}}
 
-\item{extra_vars}{额外关注变量名（字符串向量，可为NULL）}
+\item{extra_vars}{额外输出的项（字符串向量，可为NULL），写法同 \code{cox_run}}
+
+\item{plot_shape}{是否返回绘图友好格式（TRUE 返回分组标题 + 缩进结构；FALSE 返回原始长表, 后续异质性检验友好），默认 FALSE}
 
 \item{idL}{长格式数据的个体标识变量名（字符串）。指定后，亚组病例数和总人数按该变量去重，人时仍按各观察区间累加。}
 
@@ -46,15 +52,25 @@ cox_run_sub(
 
 \item{incidence_scale}{发病率缩放倍数，默认 1e5（即每10万人年）。}
 
-\item{plot_shape}{是否返回绘图友好格式（TRUE 返回分组标题 + 缩进结构；FALSE 返回原始长表, 后续异质性检验友好），默认 FALSE}
+\item{robust}{方差估计，同 \code{cox_run}}
 
-\item{...}{传递给cox_run的其他参数}
+\item{conf_level}{置信水平，默认 0.95}
+
+\item{group_na}{group_var 缺失的处理："drop"（默认，剔除并报告）或 "keep"（作为单独一组 "(Missing)"）}
+
+\item{interaction}{是否检验 mainvar × group_var 交互作用，默认 TRUE}
+
+\item{...}{传递给 \code{survival::coxph} 的其他参数}
 }
 \value{
-一个数据框：
-  - 当 plot_shape = FALSE：原始长表（每亚组一行）
-  - 当 plot_shape = TRUE：包含列 Group / Subgroup（Group 行为空 Subgroup，子行 Group 为空或缩进），便于直接用于森林图分面或分组标题展示
+不可见地返回 \code{myepi_result} 对象：\code{model$subgroups} 为各亚组模型，
+  \code{model$interaction} 为交互检验的简化/完整模型，\code{result} 为结果表，
+  \code{interaction} 为交互检验结果表。
+  \code{result} 在 plot_shape = FALSE 时为原始长表（Subgroup 形如 "sex: 1"，可直接用于 \code{cox_het}）；
+  plot_shape = TRUE 时包含列 Group / Subgroup（标题行为空 Subgroup），便于森林图展示。
 }
 \description{
-分组/亚组Cox回归批量分析函数，本函数支持基本的Cox回归分析和时间依赖（长数据）变量的Cox回归亚组分析。
+按 group_var 的每个水平分别拟合 Cox 模型；同时在全样本中检验 mainvar 与 group_var 的交互作用
+（模型方差时为似然比检验，稳健方差时为 Wald 检验），作为亚组差异的主要报告指标 \code{P_interaction}。
+含 group_var 的协变量项会在亚组模型中自动剔除。
 }

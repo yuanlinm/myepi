@@ -18,6 +18,8 @@ cox_run_q(
   idL = NULL,
   t_unit = c("d", "y", "m"),
   incidence_scale = 1e+05,
+  robust = NULL,
+  conf_level = 0.95,
   ...
 )
 }
@@ -27,7 +29,7 @@ cox_run_q(
 \item{mainvar}{连续变量名（字符串）}
 
 \item{q}{分组定义：
-* 若为单个整数 n (>=2)，按 n 等份（分位数）将 \code{mainvar} 切分为 n 组（Q1 为参考）。
+* 若为单个整数 n (>=2)，按 n 等份（分位数）将 `mainvar` 切分为 n 组（Q1 为参考）。
 * 若为数值型向量（长度 >=2），则被视为用户自定义分组断点（自动排序去重），相邻两个断点形成一个区间；向量的最小值与最大值作为总体边界，不自动扩展为 -Inf/Inf。}
 
 \item{time1}{随访开始时间变量名（字符串）}
@@ -36,9 +38,13 @@ cox_run_q(
 
 \item{timediff}{生存时间变量名（字符串，可选）}
 
-\item{event}{结局变量名（字符串，0/1）}
+\item{event}{结局变量名（字符串）。编码遵循 \code{survival::Surv}}
 
-\item{covars}{协变量名（字符串向量，可为NULL）}
+\item{covars}{协变量（字符串向量，可为NULL），写法同 \code{cox_run}}
+
+\item{trend}{是否进行趋势性检验（逻辑值，默认 FALSE）。}
+
+\item{trend_method}{趋势性检验方法："median" 使用各分组内原始连续变量的中位数构造连续变量；"ordinal" 使用 1,2,3,...,k 为分组得分。默认 "median"。}
 
 \item{idL}{长格式数据的个体标识变量名（字符串）。指定后，各分组病例数和总人数按该变量去重，人时仍按各观察区间累加。}
 
@@ -46,23 +52,25 @@ cox_run_q(
 
 \item{incidence_scale}{发病率缩放倍数，默认 1e5（即每10万人年）。}
 
-\item{trend}{是否进行趋势性检验（逻辑值，默认 FALSE）。}
+\item{robust}{方差估计，同 \code{cox_run}；趋势检验使用相同的方差设置}
 
-\item{trend_method}{趋势性检验方法："median" 使用各分组内原始连续变量的中位数构造连续变量；"ordinal" 使用 1,2,3,...,k 为分组得分。默认 "median"。}
+\item{conf_level}{置信水平，默认 0.95}
 
-\item{...}{传递给cox_run的其他参数}
+\item{...}{传递给 \code{survival::coxph} 的其他参数}
 }
 \value{
-一个数据框，包含分组Cox回归结果及（可选）趋势性检验列；同时带有属性 \code{quantile_breaks} 记录切分断点。
+不可见地返回 \code{myepi_result} 对象：\code{model$main} 为分组模型，\code{model$trend} 为趋势模型，
+  \code{result} 为结果表（Interval 为区间定义，带属性 \code{quantile_breaks}），\code{breaks} 为实际断点，
+  \code{trend} 为趋势检验结果。
 }
 \description{
-连续变量分位数Cox回归分析函数。
+分位点在分析样本（完整病例）中计算；指定 idL 时按“个体 × 取值”去重后计算，避免随访区间多的个体权重过大。
+分位点存在重复值（离散变量常见）时自动合并并给出警告。运行时以 message 报告各组样本量；
+长格式数据中同一个体的不同记录可落入不同组，因此各组个体数之和可大于总个体数。
 }
 \details{
-当 \code{trend = TRUE} 时，会在结果表中新增两列：
-\itemize{
-\item \code{beta_trend}：趋势性检验中连续变量的回归系数（log(HR)），仅在结果表第一行显示。
-\item \code{P_trend}：对应的显著性 P 值，仅在第一行显示。
-}
-若趋势性模型无法拟合（例如全部缺失或单一值），则两列返回 NA。
+当 `trend = TRUE` 时，会在结果表中新增两列：
+* `beta_trend`：趋势性检验中连续变量的回归系数（log(HR)），仅在结果表第一行显示。
+* `P_trend`：对应的显著性 P 值，仅在第一行显示。
+完整的趋势检验结果另见返回对象的 \code{trend} 元素。
 }

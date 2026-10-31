@@ -1,100 +1,67 @@
 #' my NAs reporting func
 #'
-#' report NAs as a ordered printed data frame
+#' report NAs as a ordered data frame
 #'
 #' @param dat A data frame to be checked for missing values.
-#' @param group_var (可选) 分组变量名（字符串），如指定则按该变量分组统计缺失。
-#' @return 一个数据框，包含变量、类型、缺失数、缺失率，若分组则每组一行。
-#'
+#' @param group_var (可选) 分组变量名（字符串），如指定则按该变量分组统计缺失；分组变量本身的缺失作为单独一组（Group 为 NA）。
+#' @return 不可见地返回数据框：变量、（分组）、类型、样本量 N、缺失数、缺失率（%，原始精度），仅含存在缺失的变量，按整体缺失率降序。
+#'   无缺失时返回 0 行数据框并给出 message。
 #'
 #' @export
 count_na <- function(dat, group_var = NULL) {
   if (!is.data.frame(dat)) stop("Input must be a data frame.")
-  if (!is.null(group_var)) {
-    if (!group_var %in% names(dat)) stop("分组变量不存在于数据框中");
-    # 计算每个变量的整体缺失率
-    all_vars <- setdiff(names(dat), group_var)
-    n_total_all <- nrow(dat)
-    overall_na_count <- sapply(all_vars, function(varname) sum(is.na(dat[[varname]])))
-    # 只保留整体存在缺失的变量
-    vars_with_na <- names(overall_na_count[overall_na_count > 0])
-    if (length(vars_with_na) == 0) {
-      return(data.frame(Message = "No missing values found."))
-    }
-    overall_na_rate <- overall_na_count[vars_with_na] / n_total_all
-    var_order <- names(sort(overall_na_rate, decreasing = TRUE))
-    # 分组统计
-    groups <- unique(dat[[group_var]])
-    # 向量化分组统计，提升速度
-    group_vec <- dat[[group_var]]
-    res_list <- vector("list", length = length(var_order) * length(groups))
-    idx <- 1
-    for (varname in var_order) {
-      vec <- dat[[varname]]
-      var_type <- if (is.numeric(vec) || is.integer(vec)) {
-        "Continuous"
-      } else if (is.factor(vec) || is.character(vec)) {
-        "Categorical"
-      } else if (inherits(vec, "Date") || inherits(vec, "POSIXct")) {
-        "Date/Time"
-      } else {
-        class(vec)[1]
-      }
-      for (g in groups) {
-        sel <- group_vec == g
-        n_total <- sum(sel)
-        na_total <- sum(is.na(vec[sel]))
-        na_rate_num <- if (n_total == 0) 0 else round(100 * na_total / n_total, 2)
-        res_list[[idx]] <- data.frame(
-          Variable = varname,
-          Group = g,
-          Type = var_type,
-          Missing = na_total,
-          MissingRate = paste0(na_rate_num, "%"),
-          stringsAsFactors = FALSE
-        )
-        idx <- idx + 1
-      }
-    }
-    res <- do.call(rbind, res_list)
-    # 只保留整体存在缺失的变量（即var_order）
-    if (nrow(res) == 0) {
-      return(data.frame(Message = "No missing values found."))
-    }
-    rownames(res) <- NULL
-    return(res)
+  dat <- as.data.frame(dat)
+  if (!is.null(group_var) && (length(group_var) != 1L || !group_var %in% names(dat))) stop("分组变量不存在于数据框中")
+
+  vars <- setdiff(names(dat), group_var)
+  na_mat <- is.na(dat[vars])
+  overall <- colSums(na_mat)
+  vars_na <- vars[overall > 0]
+  vars_na <- vars_na[order(-overall[vars_na])]
+  types <- vapply(dat[vars_na], .var_type, character(1))
+
+  if (length(vars_na) == 0L) {
+    message("未发现缺失值")
+    empty <- data.frame(Variable = character(0), Type = character(0), N = integer(0),
+                        Missing = numeric(0), MissingRate = numeric(0), stringsAsFactors = FALSE)
+    if (!is.null(group_var)) empty <- cbind(empty[1], Group = character(0), empty[-1])
+    return(invisible(empty))
+  }
+
+  if (is.null(group_var)) {
+    res <- data.frame(
+      Variable = vars_na, Type = unname(types), N = nrow(dat),
+      Missing = unname(overall[vars_na]), MissingRate = unname(100 * overall[vars_na] / nrow(dat)),
+      stringsAsFactors = FALSE
+    )
   } else {
-    n_total <- nrow(dat)
-    res <- lapply(names(dat), function(varname) {
-      vec <- dat[[varname]]
-      na_total <- sum(is.na(vec))
-      if (na_total == 0) return(NULL)
-      var_type <- if (is.numeric(vec) || is.integer(vec)) {
-        "Continuous"
-      } else if (is.factor(vec) || is.character(vec)) {
-        "Categorical"
-      } else if (inherits(vec, "Date") || inherits(vec, "POSIXct")) {
-        "Date/Time"
-      } else {
-        class(vec)[1]
-      }
-      na_rate_num <- round(100 * na_total / n_total, 2)
-      data.frame(
-        Variable = varname,
-        Type = var_type,
-        Missing = na_total,
-        MissingRate = paste0(na_rate_num, "%"),
-        RateSort = na_rate_num,
-        stringsAsFactors = FALSE
-      )
-    })
-    res <- do.call(rbind, res)
-    if (is.null(res)) {
-      return(data.frame(Message = "No missing values found."))
-    }
-    res <- res[order(-res$RateSort), ]
-    res$RateSort <- NULL
-    rownames(res) <- NULL
-    return(res)
+    g <- addNA(factor(dat[[group_var]]), ifany = TRUE)
+    counts <- rowsum(na_mat[, vars_na, drop = FALSE] * 1L, as.integer(g), reorder = TRUE)
+    present <- sort(unique(as.integer(g)))
+    n_g <- tabulate(as.integer(g), nbins = nlevels(g))[present]
+    lev <- as.character(levels(g))[present]
+    res <- data.frame(
+      Variable = rep(vars_na, each = length(present)),
+      Group = rep(lev, times = length(vars_na)),
+      Type = rep(unname(types), each = length(present)),
+      N = rep(n_g, times = length(vars_na)),
+      Missing = as.vector(counts),
+      stringsAsFactors = FALSE
+    )
+    res$MissingRate <- 100 * res$Missing / res$N
+  }
+  rownames(res) <- NULL
+  invisible(res)
+}
+
+.var_type <- function(vec) {
+  if (is.numeric(vec)) {
+    "Continuous"
+  } else if (is.factor(vec) || is.character(vec) || is.logical(vec)) {
+    "Categorical"
+  } else if (inherits(vec, "Date") || inherits(vec, "POSIXt")) {
+    "Date/Time"
+  } else {
+    class(vec)[1]
   }
 }

@@ -4,29 +4,22 @@
 \alias{cox_het}
 \title{Cox亚组异质性检验（对接cox_run_sub结果）}
 \usage{
-cox_het(df, method = "REML", digits = 3, ...)
+cox_het(x, method = "EE", ...)
 }
 \arguments{
-\item{df}{cox_run_sub等输出的数据框，需包含Subgroup、beta、se列，Subgroup格式为“亚组名: 水平”
-- Subgroup：字符型，格式如"sex: female"，冒号前为亚组名，后为水平。
-- beta：主效应log(HR)或log(OR)等，作为效应量。
-- se：beta的标准误。}
+\item{x}{\code{cox_run_sub} 返回的结果对象，或其 \code{result} 数据框（plot_shape = FALSE）。
+需包含 Subgroup（形如 "sex: female"）、beta、se 列；varname、Interval、Reference 列存在时用于分组与排除参照行}
 
-\item{method}{metafor::rma的method参数，默认"FE"（固定效应），可选"DL"、"REML"等}
+\item{method}{\code{metafor::rma} 的 method 参数，默认 "EE"（等效/固定效应，检验亚组间差异的标准设定）}
 
-\item{digits}{保留小数位，默认2}
-
-\item{...}{传递给metafor::rma的其他参数}
+\item{...}{传递给 \code{metafor::rma} 的其他参数}
 }
 \value{
-一个数据框，包含亚组、组数、Q统计量、p值、I2等异质性指标
+不可见地返回 \code{myepi_result} 对象：\code{model} 为各组 rma 模型列表，
+  \code{result} 为异质性检验结果表（k、Q、Q_df、Q_pvalue、I2、tau2），数值保存原始精度
 }
 \description{
-对`cox_run_sub`/`cox_run_sub`等函数输出的亚组分析结果，按Subgroup列自动分组，调用metafor::rma进行异质性检验，输出Q统计量、p值、I2等。
-}
-\details{
-- 自动识别Subgroup列（格式如"sex: female"），对每个亚组名分组，调用metafor::rma进行异质性检验。
-  - 必须包含列：Subgroup（分组信息）、beta（效应量）、se（标准误）。
-  - 若需自定义效应量或标准误，请确保列名与上述一致，或在调用前重命名。
-  - 适用于cox_run_sub等标准输出。
+对 \code{cox_run_sub} 输出的亚组结果，按“亚组变量 × 关注变量 × 水平”分组，调用 \code{metafor::rma}
+检验各亚组估计值间的异质性（Cochran's Q、I2 等）。参照行及 se 缺失/非正的行自动排除。
+亚组差异的主要报告指标建议使用 \code{cox_run_sub} 的 \code{P_interaction}；本函数作为补充。
 }
