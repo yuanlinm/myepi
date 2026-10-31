@@ -113,6 +113,7 @@ cox_run_q <- function(data, mainvar, q = 3, time1 = NULL, time2 = NULL, timediff
 
   info <- .cox_info(prep, fit, vc, conf_level, t_unit, incidence_scale)
   info$n_dropped <- prep0$n_drop
+  info$mainvar <- mainvar
   info$header <- c(
     sprintf("分组 Cox 回归: %s 分为 %d 组；断点 %s", mainvar, k, paste(format(breaks, digits = 4, trim = TRUE), collapse = ", ")),
     sprintf("分析样本: %d 行，事件 %d（剔除缺失 %d 行）", fit$n, fit$nevent, prep0$n_drop),
