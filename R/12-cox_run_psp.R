@@ -44,6 +44,11 @@ cox_run_psp <- function(data, time1 = NULL, time2 = NULL, timediff = NULL, event
   prep <- setup$prep
   # model = TRUE：predict(newdata) 时使用保存的模型框，无需在公式环境中重新查找原始数据
   fit <- .fit_cox(prep, model = TRUE, ...)
+  # survival 将 pspline 的 printfun 环境设为全局环境，未 library(survival) 时 summary() 找不到 coxph.wtest；
+  # 改为 survival 命名空间，检验仍由 survival 原代码计算
+  for (i in seq_along(fit$printfun)) {
+    if (is.function(fit$printfun[[i]])) environment(fit$printfun[[i]]) <- asNamespace("survival")
+  }
 
   # 曲线：predict(type = "terms") 与 termplot() 等价；mainvar 的样条项为第 1 项
   newdata <- prep$data[rep(1L, length(setup$grid)), , drop = FALSE]

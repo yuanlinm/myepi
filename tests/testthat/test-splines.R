@@ -95,6 +95,18 @@ test_that("cox_run_psp follows the survival vignette (termplot) and summary test
   expect_equal(p$spline$df, unname(fit$df[1]))
 })
 
+test_that("cox_run_psp works without attaching survival", {
+  skip_on_cran()
+  script <- tempfile(fileext = ".R")
+  writeLines(c(
+    "d <- survival::lung; d$ev <- as.integer(d$status == 2)",
+    "p <- suppressMessages(myepi::cox_run_psp(d, timediff = 'time', event = 'ev', mainvar = 'age'))",
+    "cat(!'package:survival' %in% search(), nrow(p$result), is.finite(p$tests$P[2]))"
+  ), script)
+  out <- system2(file.path(R.home("bin"), "Rscript"), script, stdout = TRUE, stderr = TRUE)
+  expect_equal(utils::tail(out, 1), "TRUE 500 TRUE")
+})
+
 test_that("cox_run_psp parameters and opt-in robust variance", {
   d <- make_lung()
   expect_error(cox_run_psp(d, timediff = "time", event = "ev", mainvar = "age", df = 3, theta = 0.5))
@@ -115,4 +127,35 @@ test_that("cox_run_psp parameters and opt-in robust variance", {
   pl <- quiet(cox_run_psp(long, time1 = "t1", time2 = "t2", event = "ev", mainvar = "age", idL = "id", robust = TRUE))
   fl <- coxph(Surv(t1, t2, ev) ~ pspline(age, df = 4) + cluster(id), data = long)
   expect_equal(pl$tests$P, unname(summary(fl)$coefficients[1:2, "p"]))
+})
+
+test_that("plot_crf draws RCS and PSP curves with the requested elements only", {
+  font <- test_font()
+  d <- make_lung()
+  r <- quiet(cox_run_psp(d, timediff = "time", event = "ev", mainvar = "age"))
+  path <- tempfile(fileext = ".pdf")
+  f <- plot_crf(r, path, xlab = "Age (years)", font_family = font)
+  expect_true(file.exists(path))
+  expect_equal(f$summary$status, "ok")
+  expect_match(f$summary$strokes_in_pdf, "^0.6 pt x[0-9]+, 0.75 pt x1$")
+  txt <- pdf_text(path)
+  expect_true(grepl("Age (years)", txt, fixed = TRUE))
+  expect_true(grepl("HazardRatio", gsub("\\s+", "", txt), fixed = TRUE))
+
+  path2 <- tempfile(fileext = ".pdf")
+  f2 <- plot_crf(r, path2, ci_fill = FALSE, ci_border = TRUE, ci_border_width = 0.4, line_width = 1.2, font_family = font)
+  expect_match(f2$summary$strokes_in_pdf, "^0.4 pt x2, 0.6 pt x[0-9]+, 1.2 pt x1$")
+
+  expect_warning(plot_crf(r, tempfile(fileext = ".pdf"), ylim = c(0.8, 1.2), font_family = font), "ylim")
+  expect_error(plot_crf(quiet(cox_run(d, timediff = "time", event = "ev", mainvar = "age")), tempfile(fileext = ".pdf")))
+  expect_error(plot_crf(r, tempfile(fileext = ".pdf"), line_alpha = 2, font_family = font))
+})
+
+test_that("plot_crf accepts cox_run_rcs output", {
+  skip_if_not_installed("rms")
+  font <- test_font()
+  d <- make_lung()
+  r <- quiet(cox_run_rcs(d, timediff = "time", event = "ev", mainvar = "age", ref = 60))
+  f <- plot_crf(r, tempfile(fileext = ".pdf"), xlab = expression(Age[years]), font_family = font)
+  expect_match(f$summary$source, "age \\(rcs\\), 500 points")
 })
