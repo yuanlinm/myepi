@@ -10,7 +10,8 @@
 #'   \item \code{cox_run_sub} 结果：每个结果为一个亚组块（标题为分组变量，类别为各水平），
 #'     \code{P_interaction} 显示在标题行；分类暴露时显示各非参照水平。
 #'   \item \code{cox_run_q} 结果：一个块，类别为各分位组，参照组显示 "1.00 (Ref)"；有趋势检验时显示 P for trend。
-#'   \item \code{cox_run} 结果：每个关注变量一个块；数值变量折叠为一行。
+#'   \item \code{cox_run}、\code{logit_run}、\code{clogit_run}、\code{lm_run} 结果：每个关注变量一个块；数值变量折叠为一行。
+#'     效应量（HR、OR、beta）、轴标题与无效值自动识别。
 #'   \item 上述结果组成的无名列表：按顺序堆叠为同一面板中的多个块；具名列表：每个元素为一个面板（1–3 个），
 #'     各面板的行必须一一对应。
 #'   \item 数据框：按 \code{subgroup_col}、\code{category_col} 与 \code{panels} 的列映射作图（与 skill 的 CLI 等价）。
@@ -22,14 +23,16 @@
 #'   或 list(title, ci_text, p, color)；ci_text 为 "1.07 (1.03-1.12)" 形式的组合列；p 可省略。
 #'   默认单面板 list(title = "", estimate = "HR", lower = "HR_lower", upper = "HR_upper")
 #' @param subgroup_col,category_col 仅数据框输入：亚组（加粗标题行）列与类别（缩进行）列
-#' @param count_cols 可选计数列（字符向量；具名时以名称作为列标题），如 \code{c(Events = "N_event", Total = "N_total")}
-#' @param ref_col 仅数据框输入：逻辑列，标记参照行（显示 "1.00 (Ref)"，不画 CI）
+#' @param count_cols 可选计数列（字符向量；具名时以名称作为列标题），如 \code{c(Events = "N_event", Total = "N_total")}；
+#'   myepi 结果可用 N_event、N_total、N_case、N_control、N
+#' @param ref_col 仅数据框输入：逻辑列，标记参照行（显示 "无效值 (Ref)"，如 "1.00 (Ref)"，不画 CI）
 #' @param labels 可选具名字符向量，将亚组/类别的原始标签（名称）精确替换为显示标签（值），
 #'   如 \code{c(sex_f = "Sex", age_group = "Age")}
 #' @param exclude 按精确标签剔除显示行："亚组|类别"，或 "亚组|*" 剔除整个亚组（使用替换后的显示标签）
-#' @param effect_axis_label 效应量名称（轴标题与列标题），如 "Hazard ratio"、"Odds ratio"
-#' @param effect_abbreviation 效应量缩写（用于 footer_note = "AUTO"）
-#' @param null_value 无效值：比值类为 1，差值类为 0
+#' @param effect_axis_label 效应量名称（轴标题与列标题）；NULL 时按输入自动确定：HR 为 "Hazard ratio"，
+#'   OR（\code{logit_run}、\code{clogit_run}）为 "Odds ratio"，beta（\code{lm_run}）为 "Beta"；数据框输入默认 "Hazard ratio"
+#' @param effect_abbreviation 效应量缩写（用于 footer_note = "AUTO"）；NULL 时按输入自动确定
+#' @param null_value 无效值；NULL 时按输入自动确定：比值类（HR、OR）为 1，beta 为 0
 #' @param scale "linear"（默认）或 "log"
 #' @param x_min,x_max,ticks 坐标轴范围与刻度（NULL 为自动）
 #' @param tick_digits 刻度小数位（NULL 为自动）
@@ -48,7 +51,7 @@
 #' @export
 plot_forest <- function(x, file, panels = NULL, subgroup_col = "Subgroup", category_col = "Category",
                         count_cols = NULL, ref_col = NULL, labels = NULL, exclude = NULL,
-                        effect_axis_label = "Hazard ratio", effect_abbreviation = "HR", null_value = 1,
+                        effect_axis_label = NULL, effect_abbreviation = NULL, null_value = NULL,
                         scale = c("linear", "log"), x_min = NULL, x_max = NULL, ticks = NULL, tick_digits = NULL,
                         digits = 2, p_digits = 3, ci_sep = c("auto", "dash", "to"),
                         p_kind = c("auto", "interaction", "heterogeneity", "trend", "row"), p_heading = NULL,
@@ -57,6 +60,10 @@ plot_forest <- function(x, file, panels = NULL, subgroup_col = "Subgroup", categ
   scale <- match.arg(scale)
   ci_sep <- match.arg(ci_sep)
   p_kind <- match.arg(p_kind)
+  measure <- .FP_MEASURES[[if (is.null(m <- .fp_input_measure(x))) "HR" else m]]
+  if (is.null(effect_axis_label)) effect_axis_label <- measure$label
+  if (is.null(effect_abbreviation)) effect_abbreviation <- measure$abbr
+  if (is.null(null_value)) null_value <- measure$null
   null_value <- .fp_check_number(null_value, "null_value", allow_null = FALSE)
   digits <- .fp_check_digits(digits, "digits")
   p_digits <- .fp_check_digits(p_digits, "p_digits")
@@ -150,6 +157,8 @@ plot_forest <- function(x, file, panels = NULL, subgroup_col = "Subgroup", categ
   invisible(structure(list(file = rendered$output, summary = summary), class = "myepi_forest"))
 }
 
+.FP_COUNT_COLUMNS <- c("N_event", "N_total", "N_case", "N_control", "N")
+
 .FP_TABLE_STYLE <- list(
   body = 7.25, subgroup = 7.5, header = 6.7, p_header = 6.5, panel = 7.8,
   row = 5.15, top = 5.0, header_zone = 10.0, axis_zone = 14.0, side = 4.0,
@@ -162,20 +171,21 @@ plot_forest <- function(x, file, panels = NULL, subgroup_col = "Subgroup", categ
 
 .fp_is_result <- function(x) inherits(x, "myepi_result")
 
-# 单个 myepi 结果 → 长表块（subgroup, category, estimate, lower, upper, ref, p, p_kind, N_event, N_total）
+# 单个 myepi 结果 → 长表块（subgroup, category, estimate, lower, upper, ref, p, p_kind, 计数列）
 .fp_result_blocks <- function(res) {
   r <- res$result
   if (!is.data.frame(r) || nrow(r) == 0L) stop("myepi 结果的 result 为空", call. = FALSE)
   if ("Group" %in% names(r)) stop("请使用 plot_shape = FALSE 的 cox_run_sub 结果", call. = FALSE)
-  if (!all(c("HR", "HR_lower", "HR_upper") %in% names(r))) stop("myepi 结果缺少 HR、HR_lower、HR_upper 列", call. = FALSE)
+  cols <- .FP_MEASURES[[.fp_result_measure(r)]]$cols
   ref <- if ("Reference" %in% names(r)) r$Reference %in% TRUE else rep(FALSE, nrow(r))
   num <- function(col) if (col %in% names(r)) as.numeric(r[[col]]) else rep(NA_real_, nrow(r))
   block <- function(rows, subgroup, category, p = NA_real_, p_kind = NA_character_) {
     data.frame(
       subgroup = subgroup, category = category,
-      estimate = r$HR[rows], lower = r$HR_lower[rows], upper = r$HR_upper[rows], ref = ref[rows],
+      estimate = r[[cols[1]]][rows], lower = r[[cols[2]]][rows], upper = r[[cols[3]]][rows], ref = ref[rows],
       p = c(p, rep(NA_real_, length(rows) - 1L)), p_kind = p_kind,
       N_event = num("N_event")[rows], N_total = num("N_total")[rows],
+      N_case = num("N_case")[rows], N_control = num("N_control")[rows], N = num("N")[rows],
       stringsAsFactors = FALSE
     )
   }
@@ -276,7 +286,9 @@ plot_forest <- function(x, file, panels = NULL, subgroup_col = "Subgroup", categ
   }
   if (length(count_columns) > 0L) {
     if (length(longs) > 1L) stop("多面板时计数因面板而异，请使用单面板或数据框接口", call. = FALSE)
-    if (!all(count_columns %in% c("N_event", "N_total"))) stop("myepi 结果输入时 count_cols 只能取 N_event、N_total", call. = FALSE)
+    if (!all(count_columns %in% .FP_COUNT_COLUMNS)) {
+      stop("myepi 结果输入时 count_cols 只能取 ", paste(.FP_COUNT_COLUMNS, collapse = "、"), call. = FALSE)
+    }
   }
 
   data <- data.frame(Subgroup = base$subgroup, Category = base$category, stringsAsFactors = FALSE)

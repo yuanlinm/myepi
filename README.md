@@ -1,6 +1,6 @@
 # myepi
 
-队列研究常用分析：缺失概览、Cox 回归（主效应、分位数、亚组与交互、异质性）、非线性剂量反应（RCS / PSP），以及发表级森林图与剂量反应曲线图。
+队列与病例对照研究常用分析：缺失概览、Cox 回归（主效应、分位数、亚组与交互、异质性）、非线性剂量反应（RCS / PSP）、逻辑回归、条件逻辑回归与线性回归，以及发表级森林图与剂量反应曲线图。
 
 反馈与需求：关注公众号 **epi solution** 后留言。
 
@@ -12,7 +12,7 @@ devtools::install_github("yuanlinm/myepi")
 library(myepi)
 ```
 
-可选依赖：`rms`（`cox_run_rcs`）、`systemfonts`（绘图前检查字体）；系统工具 poppler（绘图后校验 PDF 的嵌入字体与文本）。
+可选依赖：`rms`（`cox_run_rcs`）、`sandwich`（`logit_run` / `lm_run` 的稳健方差）、`systemfonts`（绘图前检查字体）；系统工具 poppler（绘图后校验 PDF 的嵌入字体与文本）。
 
 ## 通用约定
 
@@ -97,6 +97,33 @@ res$tests    # 线性与非线性 Wald 检验
 
 两个样条函数都不允许协变量中出现含 `mainvar` 的项。
 
+### logit_run：逻辑回归
+
+```r
+res <- logit_run(df, outcome = "case", mainvar = "exposure", covars = c("age", "sex"))
+res$result   # 各水平的病例数/总人数、OR、95% CI、P
+```
+
+基于 `glm(family = binomial)`。结局可为 0/1、TRUE/FALSE 或二水平因子（第二个水平为事件）。`ci_method = "wald"`（默认）或 `"profile"`（剖面似然）；`robust = TRUE` 时用 `sandwich` 稳健方差（有 `cluster()` 时按其聚类）。
+
+### clogit_run：条件逻辑回归
+
+```r
+res <- clogit_run(df, outcome = "case", mainvar = "exposure", match_id = "set_id", covars = "bmi")
+res$result   # 各水平的病例数与对照数、OR、95% CI、P
+```
+
+基于 `survival::clogit`（默认精确条件似然）。报告匹配组数与有效匹配组数（同时含病例与对照）。稳健方差需同时设置 `method = "approximate"` 或 `"efron"`。
+
+### lm_run：线性回归
+
+```r
+res <- lm_run(df, outcome = "sbp", mainvar = "exposure", covars = c("age", "sex"))
+res$result   # 各水平的人数、结局均值与标准差、beta、95% CI、P
+```
+
+基于 `lm`，推断采用 t 分布；`res$info` 含 R² 与调整 R²。
+
 ### plot_forest：森林图（表格式）
 
 ```r
@@ -107,7 +134,7 @@ plot_forest(list(sub_sex, sub_age), file = "forest.pdf",
 plot_forest(list(PM2.5 = list(sub_sex, sub_age), O3 = list(sub_sex2, sub_age2)), file = "forest2.pdf")
 ```
 
-接收 `cox_run_sub`、`cox_run_q`、`cox_run` 的结果或数据框；具名列表为多个面板（1–3 个）。输出矢量 PDF，`lancet_style = TRUE` 为 Lancet 排版。
+接收 `cox_run_sub`、`cox_run_q`、`cox_run`、`logit_run`、`clogit_run`、`lm_run` 的结果或数据框；效应量（HR / OR / beta）、轴标题与无效值（1 或 0）自动识别。具名列表为多个面板（1–3 个）。输出矢量 PDF，`lancet_style = TRUE` 为 Lancet 排版。
 
 ### plot_forest_landscape：森林图（横向）
 

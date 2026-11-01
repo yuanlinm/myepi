@@ -15,8 +15,8 @@ plot_forest_landscape(
   lower = "HR_lower",
   upper = "HR_upper",
   unmatched = c("error", "drop"),
-  effect_label = "HR",
-  null_value = 1,
+  effect_label = NULL,
+  null_value = NULL,
   scale = c("linear", "log"),
   y_min = NULL,
   y_max = NULL,
@@ -46,9 +46,9 @@ plot_forest_landscape(
 
 \item{unmatched}{仅数据框输入：不匹配任何面板的行，"error"（默认）报错或 "drop" 剔除并报告}
 
-\item{effect_label}{y 轴标题，如 "HR"}
+\item{effect_label}{y 轴标题；NULL 时按输入自动确定（"HR"、"OR" 或 "Beta"；数据框输入默认 "HR"）}
 
-\item{null_value}{无效值：比值类为 1，差值类为 0}
+\item{null_value}{无效值；NULL 时按输入自动确定：比值类（HR、OR）为 1，beta 为 0}
 
 \item{scale}{"linear"（默认）或 "log"}
 

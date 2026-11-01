@@ -20,8 +20,8 @@
 #' @param category_labels 类别标签（按顺序），可替代 \code{category_col} 或列表名称
 #' @param estimate,lower,upper 仅数据框输入：估计值与 CI 列名
 #' @param unmatched 仅数据框输入：不匹配任何面板的行，"error"（默认）报错或 "drop" 剔除并报告
-#' @param effect_label y 轴标题，如 "HR"
-#' @param null_value 无效值：比值类为 1，差值类为 0
+#' @param effect_label y 轴标题；NULL 时按输入自动确定（"HR"、"OR" 或 "Beta"；数据框输入默认 "HR"）
+#' @param null_value 无效值；NULL 时按输入自动确定：比值类（HR、OR）为 1，beta 为 0
 #' @param scale "linear"（默认）或 "log"
 #' @param y_min,y_max,y_ticks y 轴范围与刻度（NULL 为自动）
 #' @param tick_digits 刻度小数位（NULL 为自动）
@@ -33,12 +33,15 @@
 #' @export
 plot_forest_landscape <- function(x, file, panels = NULL, panel_col = NULL, category_col = NULL, category_labels = NULL,
                                   estimate = "HR", lower = "HR_lower", upper = "HR_upper",
-                                  unmatched = c("error", "drop"), effect_label = "HR", null_value = 1,
+                                  unmatched = c("error", "drop"), effect_label = NULL, null_value = NULL,
                                   scale = c("linear", "log"), y_min = NULL, y_max = NULL, y_ticks = NULL,
                                   tick_digits = NULL, width_mm = 190, height_mm = NULL, lancet_style = FALSE,
                                   font_family = "Helvetica", overwrite = FALSE) {
   unmatched <- match.arg(unmatched)
   scale <- match.arg(scale)
+  measure <- .FP_MEASURES[[if (is.null(m <- .fp_input_measure(x))) "HR" else m]]
+  if (is.null(effect_label)) effect_label <- measure$abbr
+  if (is.null(null_value)) null_value <- measure$null
   null_value <- .fp_check_number(null_value, "null_value", allow_null = FALSE)
   tick_digits <- .fp_check_digits(tick_digits, "tick_digits")
   y_ticks <- .fp_check_ticks(y_ticks, "y_ticks")
@@ -144,9 +147,10 @@ plot_forest_landscape <- function(x, file, panels = NULL, panel_col = NULL, cate
       r <- element$result
       keep <- if ("Reference" %in% names(r)) !r$Reference %in% TRUE else rep(TRUE, nrow(r))
       r <- r[keep, , drop = FALSE]
+      cols <- .FP_MEASURES[[.fp_result_measure(r)]]$cols
       labels <- if (all(is.na(r$Interval)) || length(unique(r$varname)) == nrow(r)) r$varname else r$Interval
       if (!is.null(element$breaks)) labels <- r$Interval
-      return(data.frame(.panel = title, .category = labels, HR = r$HR, HR_lower = r$HR_lower, HR_upper = r$HR_upper,
+      return(data.frame(.panel = title, .category = labels, HR = r[[cols[1]]], HR_lower = r[[cols[2]]], HR_upper = r[[cols[3]]],
                         stringsAsFactors = FALSE))
     }
     if (!is.list(element) || !all(vapply(element, .fp_is_result, logical(1)))) {
@@ -163,8 +167,9 @@ plot_forest_landscape <- function(x, file, panels = NULL, panel_col = NULL, cate
              call. = FALSE)
       }
       r <- r[keep, , drop = FALSE]
+      cols <- .FP_MEASURES[[.fp_result_measure(r)]]$cols
       data.frame(.panel = title, .category = if (is.null(names(element))) NA_character_ else names(element)[[i]],
-                 HR = r$HR, HR_lower = r$HR_lower, HR_upper = r$HR_upper, stringsAsFactors = FALSE)
+                 HR = r[[cols[1]]], HR_lower = r[[cols[2]]], HR_upper = r[[cols[3]]], stringsAsFactors = FALSE)
     }))
   })
   data <- do.call(rbind, rows)

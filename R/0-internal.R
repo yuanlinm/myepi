@@ -298,9 +298,9 @@ print.myepi_result <- function(x, digits = 2, ...) {
       if (!is.numeric(v)) next
       r[[col]] <- if (grepl("^P($|_)|_pvalue$", col)) {
         ifelse(is.na(v), NA_character_, format.pval(v, digits = digits, eps = 0.001))
-      } else if (col %in% c("N_event", "N_total", "n", "k", "Missing", "N", "Q_df")) {
+      } else if (col %in% c("N_event", "N_total", "N_case", "N_control", "n", "k", "Missing", "N", "Q_df")) {
         ifelse(is.na(v), NA_character_, format(v, trim = TRUE))
-      } else if (col %in% c("beta", "se", "beta_trend", "tau2", "statistic", "df", "x")) {
+      } else if (col %in% c("beta", "se", "lower", "upper", "beta_trend", "tau2", "statistic", "df", "x")) {
         fmt_fixed(v, digits + 1)
       } else {
         fmt_fixed(v, digits)
