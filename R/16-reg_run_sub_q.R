@@ -58,8 +58,10 @@
     if (!match_id %in% names(data)) stop("match_id 不在数据框中")
     varies <- tapply(as.character(data[[group_var]]), data[[match_id]], function(v) length(unique(v)) > 1L)
     if (any(varies, na.rm = TRUE)) {
-      warning(sprintf("分组变量 %s 在 %d 个匹配组内不一致：亚组模型会拆分这些匹配组。匹配设计的亚组分析宜按匹配因素或以匹配组为单位定义的特征分组",
-                      group_var, sum(varies, na.rm = TRUE)), call. = FALSE)
+      stop(sprintf(paste0("分组变量 %s 在 %d 个匹配组内不一致，按其分亚组会拆分这些匹配组、破坏匹配设计，",
+                          "不能用条件逻辑回归做亚组分析。请改用匹配因素（或以匹配组为单位定义的特征）分组；",
+                          "或改用 logit_run_sub() 做一般逻辑回归的亚组分析，并在 covars 中校正匹配因素"),
+                   group_var, sum(varies, na.rm = TRUE)), call. = FALSE)
     }
   }
   sub_covars <- .sub_covars(covars, group_var, data)
@@ -165,8 +167,9 @@ logit_run_sub <- function(data, group_var, outcome, mainvar, covars = NULL, extr
 #' 亚组条件逻辑回归（含交互检验）
 #'
 #' 按 group_var 的每个水平分别拟合条件逻辑回归；交互检验同 \code{logit_run_sub}。
-#' 分组变量在匹配组内恒定时（如按该变量匹配），其主效应已被条件似然吸收，交互模型仅纳入交互项；
-#' 分组变量在部分匹配组内不一致时给出警告（亚组模型会拆分这些匹配组）。
+#' 分组变量须在每个匹配组内恒定（如匹配因素），其主效应已被条件似然吸收，交互模型仅纳入交互项。
+#' 分组变量在任一匹配组内不一致时报错：按其分亚组会拆分匹配组、破坏匹配设计；
+#' 此时应改用匹配因素分组，或用 \code{logit_run_sub} 做一般逻辑回归的亚组分析并在 covars 中校正匹配因素。
 #'
 #' @inheritParams clogit_run
 #' @inheritParams logit_run_sub

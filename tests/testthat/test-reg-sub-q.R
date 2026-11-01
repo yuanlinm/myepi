@@ -64,7 +64,7 @@ test_that("lm_run_sub matches the nested F test, robust Wald F and subgroup fits
   expect_equal(r$interaction$test, "Wald F")
 })
 
-test_that("clogit_run_sub handles a matching factor and warns when groups split matched sets", {
+test_that("clogit_run_sub handles a matching factor and rejects groups that split matched sets", {
   d <- sq_infert()
   expect_message(s <- clogit_run_sub(d, "education", "case", "x", "stratum"), "education")
   f0 <- clogit(case ~ x + strata(stratum), data = d)
@@ -72,7 +72,7 @@ test_that("clogit_run_sub handles a matching factor and warns when groups split 
   expect_equal(s$interaction$P, anova(f0, f1)[2, "Pr(>|Chi|)"])
   sub <- clogit(case ~ x + strata(stratum), data = d[d$education == "6-11yrs", ])
   expect_equal(s$result$OR[s$result$Subgroup == "education: 6-11yrs"], unname(exp(coef(sub))))
-  expect_warning(quiet(clogit_run_sub(d, "spont", "case", "x", "stratum", interaction = FALSE)), "匹配组")
+  expect_error(quiet(clogit_run_sub(d, "spont", "case", "x", "stratum")), "logit_run_sub")
 })
 
 test_that("regression _q functions match direct fits on the same groups", {

@@ -132,7 +132,7 @@ res <- clogit_run_sub(df, group_var = "sex", outcome = "case", mainvar = "exposu
 res <- lm_run_sub(df, group_var = "sex", outcome = "sbp", mainvar = "exposure", covars = "age")
 ```
 
-用法同 `cox_run_sub`。交互检验：模型方差下逻辑回归与条件逻辑回归为似然比检验、线性回归为嵌套模型 F 检验；`robust = TRUE` 时为 Wald 检验。条件逻辑回归中分组变量在匹配组内恒定时（如按其匹配），交互模型不纳入其主效应；分组变量拆分匹配组时给出警告。
+用法同 `cox_run_sub`。交互检验：模型方差下逻辑回归与条件逻辑回归为似然比检验、线性回归为嵌套模型 F 检验；`robust = TRUE` 时为 Wald 检验。条件逻辑回归的分组变量须在匹配组内恒定（如匹配因素），交互模型不纳入其主效应；分组变量会拆分匹配组时直接报错，此时请改用匹配因素分组，或用 `logit_run_sub` 并在 `covars` 中校正匹配因素。
 
 ### logit_run_q / clogit_run_q / lm_run_q：回归模型的分位数分组
 
