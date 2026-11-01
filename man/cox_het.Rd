@@ -2,12 +2,12 @@
 % Please edit documentation in R/6-cox_het.R
 \name{cox_het}
 \alias{cox_het}
-\title{Cox亚组异质性检验（对接cox_run_sub结果）}
+\title{亚组异质性检验（对接 *_run_sub 结果）}
 \usage{
 cox_het(x, method = "EE", ...)
 }
 \arguments{
-\item{x}{\code{cox_run_sub} 返回的结果对象，或其 \code{result} 数据框（plot_shape = FALSE）。
+\item{x}{\code{*_run_sub} 返回的结果对象，或其 \code{result} 数据框（plot_shape = FALSE）。
 需包含 Subgroup（形如 "sex: female"）、beta、se 列；varname、Interval、Reference 列存在时用于分组与排除参照行}
 
 \item{method}{\code{metafor::rma} 的 method 参数，默认 "EE"（等效/固定效应，检验亚组间差异的标准设定）}
@@ -19,7 +19,7 @@ cox_het(x, method = "EE", ...)
   \code{result} 为异质性检验结果表（k、Q、Q_df、Q_pvalue、I2、tau2），数值保存原始精度
 }
 \description{
-对 \code{cox_run_sub} 输出的亚组结果，按“亚组变量 × 关注变量 × 水平”分组，调用 \code{metafor::rma}
+对 \code{cox_run_sub}、\code{logit_run_sub}、\code{clogit_run_sub}、\code{lm_run_sub} 输出的亚组结果，按“亚组变量 × 关注变量 × 水平”分组，调用 \code{metafor::rma}
 检验各亚组估计值间的异质性（Cochran's Q、I2 等）。参照行及 se 缺失/非正的行自动排除。
-亚组差异的主要报告指标建议使用 \code{cox_run_sub} 的 \code{P_interaction}；本函数作为补充。
+亚组差异的主要报告指标建议使用 \code{*_run_sub} 的 \code{P_interaction}；本函数作为补充。
 }

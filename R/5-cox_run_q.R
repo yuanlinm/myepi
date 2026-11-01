@@ -46,37 +46,13 @@ cox_run_q <- function(data, mainvar, q = 3, time1 = NULL, time2 = NULL, timediff
   # 分位点与组内中位数的计算单位：指定 idL 时为去重后的“个体 × 取值”
   basis <- if (is.null(idL)) seq_along(x) else which(!duplicated(data.frame(ana[[idL]], x)))
 
-  if (length(q) == 1L) {
-    if (!is.numeric(q) || is.na(q) || q < 2 || q != round(q)) stop("当 q 为单个整数时需 >= 2")
-    breaks <- stats::quantile(x[basis], probs = seq(0, 1, length.out = q + 1), names = FALSE)
-    if (anyDuplicated(breaks)) {
-      breaks <- unique(breaks)
-      warning(sprintf("分位点存在重复值（%s 取值离散），合并后实际分为 %d 组", mainvar, length(breaks) - 1L), call. = FALSE)
-    }
-  } else {
-    if (!is.numeric(q)) stop("当 q 为向量时必须为数值型")
-    breaks <- sort(unique(q))
-    if (any(x < breaks[1] | x > breaks[length(breaks)])) {
-      stop("数据中存在超出自定义断点范围的值；请在 q 中包含该范围的边界（或添加更大/更小的端点）")
-    }
-  }
-  if (length(breaks) < 2L) stop(sprintf("%s 只有一个取值，无法分组", mainvar))
-
-  intervals <- levels(cut(x, breaks = breaks, include.lowest = TRUE, right = TRUE, dig.lab = 4))
-  k <- length(intervals)
-  grp <- factor(cut(x, breaks = breaks, labels = FALSE, include.lowest = TRUE, right = TRUE),
-                levels = seq_len(k), labels = paste0("Q", seq_len(k)))
+  qg <- .q_groups(x, basis, q, mainvar, if (is.null(idL)) NULL else ana[[idL]])
+  breaks <- qg$breaks
+  intervals <- qg$intervals
+  k <- qg$k
+  grp <- qg$grp
   gname <- make.unique(c(names(ana), paste0(mainvar, "_q")))[ncol(ana) + 1L]
   ana[[gname]] <- grp
-
-  sizes <- table(grp)
-  size_txt <- if (is.null(idL)) sprintf("%s %s: %d", names(sizes), intervals, as.integer(sizes)) else {
-    n_id <- vapply(levels(grp), function(l) length(unique(ana[[idL]][grp == l])), integer(1))
-    sprintf("%s %s: %d 行 / %d 人", names(sizes), intervals, as.integer(sizes), n_id)
-  }
-  message(sprintf("%s 分为 %d 组，各组样本量：", mainvar, k), paste(size_txt, collapse = "；"))
-  empty <- names(sizes)[sizes == 0]
-  if (length(empty) > 0) warning("以下分组无观测: ", paste(empty, collapse = ", "), call. = FALSE)
 
   prep <- .prep_cox(ana, time1, time2, timediff, event, gname, covars, idL, robust, quiet = TRUE)
   fit <- .fit_cox(prep, ...)
@@ -88,12 +64,7 @@ cox_run_q <- function(data, mainvar, q = 3, time1 = NULL, time2 = NULL, timediff
   fit_trend <- NULL
   trend_tab <- NULL
   if (isTRUE(trend)) {
-    score <- if (trend_method == "median") {
-      med <- tapply(x[basis], grp[basis], stats::median)
-      as.numeric(med[as.integer(grp)])
-    } else {
-      as.integer(grp)
-    }
+    score <- .q_score(x, grp, basis, trend_method)
     sname <- make.unique(c(names(ana), paste0(mainvar, "_trend")))[ncol(ana) + 1L]
     ana[[sname]] <- score
     if (length(unique(score)) < 2L) {
@@ -122,4 +93,48 @@ cox_run_q <- function(data, mainvar, q = 3, time1 = NULL, time2 = NULL, timediff
   )
   invisible(.new_result(model = list(main = fit, trend = fit_trend), result = res,
                         breaks = breaks, trend = trend_tab, info = info))
+}
+
+# ---- 分位数分组共用 ----
+
+# 分位点在 basis（行号）上计算；断点重复时合并并警告；报告各组样本量（ids 非 NULL 时同时报告人数）
+.q_groups <- function(x, basis, q, mainvar, ids = NULL) {
+  if (length(q) == 1L) {
+    if (!is.numeric(q) || is.na(q) || q < 2 || q != round(q)) stop("当 q 为单个整数时需 >= 2")
+    breaks <- stats::quantile(x[basis], probs = seq(0, 1, length.out = q + 1), names = FALSE)
+    if (anyDuplicated(breaks)) {
+      breaks <- unique(breaks)
+      warning(sprintf("分位点存在重复值（%s 取值离散），合并后实际分为 %d 组", mainvar, length(breaks) - 1L), call. = FALSE)
+    }
+  } else {
+    if (!is.numeric(q)) stop("当 q 为向量时必须为数值型")
+    breaks <- sort(unique(q))
+    if (any(x < breaks[1] | x > breaks[length(breaks)])) {
+      stop("数据中存在超出自定义断点范围的值；请在 q 中包含该范围的边界（或添加更大/更小的端点）")
+    }
+  }
+  if (length(breaks) < 2L) stop(sprintf("%s 只有一个取值，无法分组", mainvar))
+  intervals <- levels(cut(x, breaks = breaks, include.lowest = TRUE, right = TRUE, dig.lab = 4))
+  k <- length(intervals)
+  grp <- factor(cut(x, breaks = breaks, labels = FALSE, include.lowest = TRUE, right = TRUE),
+                levels = seq_len(k), labels = paste0("Q", seq_len(k)))
+  sizes <- table(grp)
+  size_txt <- if (is.null(ids)) sprintf("%s %s: %d", names(sizes), intervals, as.integer(sizes)) else {
+    n_id <- vapply(levels(grp), function(l) length(unique(ids[grp == l])), integer(1))
+    sprintf("%s %s: %d 行 / %d 人", names(sizes), intervals, as.integer(sizes), n_id)
+  }
+  message(sprintf("%s 分为 %d 组，各组样本量：", mainvar, k), paste(size_txt, collapse = "；"))
+  empty <- names(sizes)[sizes == 0]
+  if (length(empty) > 0) warning("以下分组无观测: ", paste(empty, collapse = ", "), call. = FALSE)
+  list(breaks = breaks, intervals = intervals, k = k, grp = grp)
+}
+
+# 趋势检验得分：组内中位数（在 basis 上计算）或组序号
+.q_score <- function(x, grp, basis, trend_method) {
+  if (trend_method == "median") {
+    med <- tapply(x[basis], grp[basis], stats::median)
+    as.numeric(med[as.integer(grp)])
+  } else {
+    as.integer(grp)
+  }
 }

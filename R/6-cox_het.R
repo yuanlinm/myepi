@@ -1,10 +1,10 @@
-#' Cox亚组异质性检验（对接cox_run_sub结果）
+#' 亚组异质性检验（对接 *_run_sub 结果）
 #'
-#' 对 \code{cox_run_sub} 输出的亚组结果，按“亚组变量 × 关注变量 × 水平”分组，调用 \code{metafor::rma}
+#' 对 \code{cox_run_sub}、\code{logit_run_sub}、\code{clogit_run_sub}、\code{lm_run_sub} 输出的亚组结果，按“亚组变量 × 关注变量 × 水平”分组，调用 \code{metafor::rma}
 #' 检验各亚组估计值间的异质性（Cochran's Q、I2 等）。参照行及 se 缺失/非正的行自动排除。
-#' 亚组差异的主要报告指标建议使用 \code{cox_run_sub} 的 \code{P_interaction}；本函数作为补充。
+#' 亚组差异的主要报告指标建议使用 \code{*_run_sub} 的 \code{P_interaction}；本函数作为补充。
 #'
-#' @param x \code{cox_run_sub} 返回的结果对象，或其 \code{result} 数据框（plot_shape = FALSE）。
+#' @param x \code{*_run_sub} 返回的结果对象，或其 \code{result} 数据框（plot_shape = FALSE）。
 #'   需包含 Subgroup（形如 "sex: female"）、beta、se 列；varname、Interval、Reference 列存在时用于分组与排除参照行
 #' @param method \code{metafor::rma} 的 method 参数，默认 "EE"（等效/固定效应，检验亚组间差异的标准设定）
 #' @param ... 传递给 \code{metafor::rma} 的其他参数
@@ -14,7 +14,7 @@
 #' @export
 cox_het <- function(x, method = "EE", ...) {
   df <- if (inherits(x, "myepi_result")) x$result else x
-  if (!is.data.frame(df)) stop("x 必须为 cox_run_sub 的结果对象或数据框")
+  if (!is.data.frame(df)) stop("x 必须为 *_run_sub 的结果对象或数据框")
   if (!all(c("Subgroup", "beta", "se") %in% colnames(df))) stop("缺少Subgroup、beta、se列")
   if (!any(grepl(": ", df$Subgroup, fixed = TRUE))) stop("Subgroup 需为 \"亚组名: 水平\" 格式（请使用 plot_shape = FALSE 的结果）")
 

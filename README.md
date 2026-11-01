@@ -19,7 +19,7 @@ library(myepi)
 - 分析函数不自动打印，返回结果对象：`res <- cox_run(...)`，用 `print(res)` 查看，`res$result` 为结果表，`res$model` 为模型。
 - 结果表保存原始精度，仅在打印时格式化。
 - 拟合前按完整病例剔除模型变量缺失，并以 message 报告；事件数、人数、人年、发病率均基于同一分析样本。
-- 随访时间：`timediff`（右删失），或 `time1` + `time2`（计数过程长数据）；长数据用 `idL` 指定个体 ID，人数与病例数按个体去重。
+- 随访时间：`timediff`（右删失），或 `time1` + `time2`（计数过程长数据）；长数据用 `idL` 指定个体 ID，人数与病例数按个体去重（仅 Cox 系列）。
 - `event` 编码同 `survival::Surv`：0/1、TRUE/FALSE 或 1/2。
 - `covars` 可写列名或表达式，如 `"strata(center)"`、`"cluster(id)"`、`"a*b"`。
 - `robust = FALSE`（默认）使用模型方差，忽略 `cluster()`；`robust = TRUE` 使用稳健方差（按 `cluster()` 或 `idL` 聚类）。CI、P 值与各项检验均基于所选方差。
@@ -68,7 +68,7 @@ res$interaction   # 交互检验（模型方差：似然比检验；稳健方差
 ### cox_het：亚组间异质性
 
 ```r
-cox_het(res)   # res 为 cox_run_sub 的结果；metafor::rma，默认 method = "EE"
+cox_het(res)   # res 为 cox_run_sub / logit_run_sub / clogit_run_sub / lm_run_sub 的结果；metafor::rma，默认 method = "EE"
 ```
 
 输出 Cochran's Q、P 值、I²、τ²；参照行自动排除。亚组差异建议以 `P_interaction` 为主要指标。
@@ -124,6 +124,26 @@ res$result   # 各水平的人数、结局均值与标准差、beta、95% CI、P
 
 基于 `lm`，推断采用 t 分布；`res$info` 含 R² 与调整 R²。
 
+### logit_run_sub / clogit_run_sub / lm_run_sub：回归模型的亚组分析与交互检验
+
+```r
+res <- logit_run_sub(df, group_var = "sex", outcome = "case", mainvar = "exposure", covars = "age")
+res <- clogit_run_sub(df, group_var = "sex", outcome = "case", mainvar = "exposure", match_id = "set_id")
+res <- lm_run_sub(df, group_var = "sex", outcome = "sbp", mainvar = "exposure", covars = "age")
+```
+
+用法同 `cox_run_sub`。交互检验：模型方差下逻辑回归与条件逻辑回归为似然比检验、线性回归为嵌套模型 F 检验；`robust = TRUE` 时为 Wald 检验。条件逻辑回归中分组变量在匹配组内恒定时（如按其匹配），交互模型不纳入其主效应；分组变量拆分匹配组时给出警告。
+
+### logit_run_q / clogit_run_q / lm_run_q：回归模型的分位数分组
+
+```r
+res <- logit_run_q(df, outcome = "case", mainvar = "bmi", q = 4, covars = c("age", "sex"), trend = TRUE)
+res <- clogit_run_q(df, outcome = "case", mainvar = "bmi", match_id = "set_id", q = 4)
+res <- lm_run_q(df, outcome = "sbp", mainvar = "bmi", q = c(10, 18.5, 24, 28, 60))
+```
+
+用法同 `cox_run_q`（不含 `idL`）。
+
 ### logit_run_rcs / clogit_run_rcs / lm_run_rcs：回归模型的限制性立方样条
 
 ```r
@@ -146,7 +166,7 @@ plot_forest(list(sub_sex, sub_age), file = "forest.pdf",
 plot_forest(list(PM2.5 = list(sub_sex, sub_age), O3 = list(sub_sex2, sub_age2)), file = "forest2.pdf")
 ```
 
-接收 `cox_run_sub`、`cox_run_q`、`cox_run`、`logit_run`、`clogit_run`、`lm_run` 的结果或数据框；效应量（HR / OR / beta）、轴标题与无效值（1 或 0）自动识别。具名列表为多个面板（1–3 个）。输出矢量 PDF，`lancet_style = TRUE` 为 Lancet 排版。
+接收各 `*_run`、`*_run_sub`、`*_run_q` 的结果或数据框；效应量（HR / OR / beta）、轴标题与无效值（1 或 0）自动识别。具名列表为多个面板（1–3 个）。输出矢量 PDF，`lancet_style = TRUE` 为 Lancet 排版。
 
 ### plot_forest_landscape：森林图（横向）
 
