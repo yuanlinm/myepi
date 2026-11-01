@@ -50,12 +50,12 @@
 }
 
 # 二分类结局统一为 0/1：数值 0/1、逻辑值，或二水平因子（第二个水平为事件）
-.binary_outcome <- function(y, outcome) {
+.binary_outcome <- function(y, outcome, quiet = FALSE) {
   if (is.logical(y)) return(as.integer(y))
   if (is.factor(y)) {
     y <- droplevels(y)
     if (nlevels(y) != 2L) stop("结局 ", outcome, " 为因子时必须恰有两个水平")
-    message(sprintf("结局 %s 为因子：以 \"%s\" 为事件（1），\"%s\" 为参照（0）", outcome, levels(y)[2], levels(y)[1]))
+    if (!quiet) message(sprintf("结局 %s 为因子：以 \"%s\" 为事件（1），\"%s\" 为参照（0）", outcome, levels(y)[2], levels(y)[1]))
     return(as.integer(y == levels(y)[2]))
   }
   if (!is.numeric(y) || any(!y %in% c(0, 1))) stop("结局 ", outcome, " 必须为 0/1、TRUE/FALSE 或二水平因子")
@@ -64,7 +64,7 @@
 
 # 分离检测：(1) 模型中各分类变量是否存在只含事件或只含非事件的水平（单变量准完全分离，glm 不会提示）；
 # (2) 拟合过程中 glm 关于不收敛或拟合概率为 0/1 的警告。仅给出警告，不改变结果
-.check_separation <- function(prep, y, glm_warnings = character()) {
+.check_separation <- function(prep, y, glm_warnings = character(), label = NULL) {
   vars <- intersect(c(all.vars(prep$formula)[-1]), names(prep$data))
   issues <- character()
   for (v in vars) {
@@ -79,7 +79,7 @@
   }
   sep_warn <- unique(glm_warnings[grepl("fitted probabilities numerically 0 or 1|did not converge", glm_warnings)])
   if (length(issues) > 0L || length(sep_warn) > 0L) {
-    warning("可能存在（准）完全分离，相关 OR 及其 CI 不可靠：",
+    warning(if (!is.null(label)) paste0("[", label, "] "), "可能存在（准）完全分离，相关 OR 及其 CI 不可靠：",
             paste(c(issues, if (length(sep_warn)) paste0("glm: ", sep_warn)), collapse = "；"),
             "。可考虑合并稀疏水平或改用 Firth 校正逻辑回归", call. = FALSE)
     return(invisible(TRUE))
@@ -199,6 +199,132 @@
   ))
 }
 
+# ---- 回归引擎：结局校验与分析样本、按模型族拟合任意公式、结果表 ----
+
+.REG_TITLES <- c(logit = "逻辑回归", lm = "线性回归", clogit = "条件逻辑回归")
+
+.reg_check_args <- function(model, robust, ci_method, match_id, method) {
+  if (identical(ci_method, "profile") && isTRUE(robust)) stop("剖面似然 CI 不能与 robust = TRUE 同时使用")
+  if (model == "clogit") {
+    if (is.null(match_id) || !is.character(match_id) || length(match_id) != 1L) stop("match_id 必须为单个匹配组变量名")
+    if (isTRUE(robust) && (is.null(method) || identical(method, "exact"))) {
+      stop("survival::clogit 的精确法（method = \"exact\"，默认）不支持稳健方差；",
+           "如需稳健方差，请同时设置 method = \"approximate\"（Breslow 近似）或 \"efron\"", call. = FALSE)
+    }
+  }
+  invisible(NULL)
+}
+
+# 分析样本与结局：logit 统一为 0/1，clogit 校验 0/1 并报告匹配组，lm 校验数值型
+.reg_prepare <- function(model, data, outcome, mainvar, covars, robust, match_id = NULL, label = NULL, quiet = FALSE) {
+  prep <- .prep_reg(data, outcome, mainvar, covars, robust, match_id = match_id, label = label, quiet = quiet)
+  y <- prep$data[[outcome]]
+  if (model == "logit") {
+    y <- .binary_outcome(y, outcome, quiet = quiet)
+  } else if (model == "clogit") {
+    if (is.logical(y)) y <- as.integer(y)
+    if (!is.numeric(y) || any(!y %in% c(0, 1))) stop("结局 ", outcome, " 必须为 0/1 或 TRUE/FALSE")
+    informative <- tapply(y, prep$data[[match_id]], function(v) any(v == 1) && any(v == 0))
+    prep$n_sets <- length(informative)
+    prep$n_informative <- sum(informative)
+    if (!quiet) .msg(label, sprintf("匹配组: %d 个，其中同时含病例与对照的有效匹配组 %d 个", prep$n_sets, prep$n_informative))
+    if (prep$n_informative == 0L) stop("没有同时含病例与对照的匹配组")
+  } else if (!is.numeric(y)) {
+    stop("结局 ", outcome, " 必须为数值型")
+  }
+  prep$data[[outcome]] <- y
+  prep$model <- model
+  prep$outcome <- outcome
+  prep$match_id <- match_id
+  prep
+}
+
+# 按模型族拟合 formula（clogit 自动加入 strata(match_id) 与稳健方差时的 cluster()）；fit_args 为用户传入的 ...
+.reg_fit <- function(prep, formula, robust, fit_args = list()) {
+  d <- prep$data
+  if (prep$model == "logit") {
+    glm_warnings <- character()
+    fit_with <- function(...) stats::glm(formula, data = d, family = stats::binomial(), ...)
+    fit <- withCallingHandlers(do.call(fit_with, fit_args), warning = function(w) {
+      if (grepl("fitted probabilities numerically 0 or 1|did not converge", conditionMessage(w))) {
+        glm_warnings <<- c(glm_warnings, conditionMessage(w))
+        invokeRestart("muffleWarning")
+      }
+    })
+    attr(fit, "glm_warnings") <- glm_warnings
+    return(fit)
+  }
+  if (prep$model == "lm") {
+    fit_with <- function(...) stats::lm(formula, data = d, ...)
+    return(do.call(fit_with, fit_args))
+  }
+  rhs <- c(attr(stats::terms(formula), "term.labels"), sprintf("strata(%s)", .bt(prep$match_id)),
+           if (isTRUE(robust) && !is.null(prep$cluster_var)) sprintf("cluster(%s)", .bt(prep$cluster_var)))
+  fml <- stats::reformulate(rhs, response = formula[[2]])
+  environment(fml) <- new.env(parent = asNamespace("survival"))
+  # clogit 在调用者环境中构造并求值 coxph(Surv(...)) 调用，需在此局部提供这两个函数
+  coxph <- survival::coxph
+  Surv <- survival::Surv
+  fit_with <- function(...) {
+    if (isTRUE(robust)) survival::clogit(fml, data = d, robust = TRUE, ...) else survival::clogit(fml, data = d, ...)
+  }
+  do.call(fit_with, fit_args)
+}
+
+.reg_describe <- function(prep) {
+  y <- prep$data[[prep$outcome]]
+  switch(prep$model,
+    logit = function(rows) {
+      n_event <- sum(y[rows] == 1L)
+      n_total <- sum(rows)
+      data.frame(N_event = n_event, N_total = n_total, Case_Total = paste0(n_event, "/", n_total), stringsAsFactors = FALSE)
+    },
+    clogit = function(rows) data.frame(N_case = sum(y[rows] == 1), N_control = sum(y[rows] == 0)),
+    lm = function(rows) {
+      data.frame(N = sum(rows), Mean = if (any(rows)) mean(y[rows]) else NA_real_,
+                 SD = if (sum(rows) > 1L) stats::sd(y[rows]) else NA_real_)
+    }
+  )
+}
+
+.reg_sample_line <- function(prep, fit) {
+  y <- prep$data[[prep$outcome]]
+  switch(prep$model,
+    logit = sprintf("分析样本: %d 例，事件 %d（剔除缺失 %d 行）", nrow(prep$data), sum(y), prep$n_drop),
+    clogit = sprintf("分析样本: %d 例（病例 %d，对照 %d；剔除缺失 %d 行）；匹配组 %d 个，有效 %d 个",
+                     nrow(prep$data), sum(y == 1), sum(y == 0), prep$n_drop, prep$n_sets, prep$n_informative),
+    lm = {
+      s <- summary(fit)
+      sprintf("分析样本: %d 例（剔除缺失 %d 行）；R² = %.3f，调整 R² = %.3f", nrow(prep$data), prep$n_drop, s$r.squared, s$adj.r.squared)
+    }
+  )
+}
+
+# 单个模型：准备、拟合、分离检测（logit）、方差、结果表与 info
+.reg_core <- function(model, data, outcome, mainvar, covars, extra_vars, robust, conf_level, ci_method = "wald",
+                      match_id = NULL, fit_args = list(), label = NULL, quiet = FALSE) {
+  extra <- .split_extra(extra_vars, data, covars)
+  prep <- .reg_prepare(model, data, outcome, mainvar, covars, robust, match_id, label, quiet)
+  fit <- .reg_fit(prep, prep$formula, robust, fit_args)
+  separation <- if (model == "logit") .check_separation(prep, prep$data[[outcome]], attr(fit, "glm_warnings"), label) else NULL
+  vc <- .reg_vcov(fit, prep, robust)
+  est <- .reg_wald(fit, vc, conf_level, ci_method)
+  res <- .reg_table(prep, fit, est, c(mainvar, extra$focus), extra$coef, .reg_describe(prep), exp_effect = model != "lm")
+  y <- prep$data[[outcome]]
+  extra_info <- switch(model,
+    logit = list(ci_method = ci_method, n = nrow(prep$data), nevent = sum(y), separation = separation),
+    clogit = list(n = nrow(prep$data), n_case = sum(y == 1), n_sets = prep$n_sets, n_informative_sets = prep$n_informative,
+                  method = fit$method),
+    lm = {
+      s <- summary(fit)
+      list(n = nrow(prep$data), r_squared = s$r.squared, adj_r_squared = s$adj.r.squared)
+    }
+  )
+  lines <- c(.reg_sample_line(prep, fit), if (model == "logit") sprintf("CI 方法: %s", if (ci_method == "wald") "Wald" else "剖面似然"))
+  info <- do.call(.reg_info, c(list(.REG_TITLES[[model]], prep, vc, conf_level, lines), extra_info))
+  list(prep = prep, fit = fit, vc = vc, est = est, result = res, info = info)
+}
+
 #' 逻辑回归
 #'
 #' 调用 \code{glm(family = binomial)}；输出暴露各水平的病例数/总人数、OR 及 CI、P 值。
@@ -223,37 +349,9 @@ logit_run <- function(data, outcome, mainvar, covars = NULL, extra_vars = NULL, 
                       ci_method = c("wald", "profile"), conf_level = 0.95, ...) {
   ci_method <- match.arg(ci_method)
   .validate_conf_level(conf_level)
-  if (ci_method == "profile" && isTRUE(robust)) stop("剖面似然 CI 不能与 robust = TRUE 同时使用")
-  extra <- .split_extra(extra_vars, data, covars)
-  prep <- .prep_reg(data, outcome, mainvar, covars, robust)
-  prep$data[[outcome]] <- .binary_outcome(prep$data[[outcome]], outcome)
-  glm_warnings <- character()
-  fit <- withCallingHandlers(
-    stats::glm(prep$formula, data = prep$data, family = stats::binomial(), ...),
-    warning = function(w) {
-      if (grepl("fitted probabilities numerically 0 or 1|did not converge", conditionMessage(w))) {
-        glm_warnings <<- c(glm_warnings, conditionMessage(w))
-        invokeRestart("muffleWarning")
-      }
-    }
-  )
-  separation <- .check_separation(prep, prep$data[[outcome]], glm_warnings)
-  vc <- .reg_vcov(fit, prep, robust)
-  est <- .reg_wald(fit, vc, conf_level, ci_method)
-  y <- prep$data[[outcome]]
-  describe <- function(rows) {
-    n_event <- sum(y[rows] == 1L)
-    n_total <- sum(rows)
-    data.frame(N_event = n_event, N_total = n_total, Case_Total = paste0(n_event, "/", n_total), stringsAsFactors = FALSE)
-  }
-  res <- .reg_table(prep, fit, est, c(mainvar, extra$focus), extra$coef, describe, exp_effect = TRUE)
-  info <- .reg_info(
-    "逻辑回归", prep, vc, conf_level,
-    c(sprintf("分析样本: %d 例，事件 %d（剔除缺失 %d 行）", nrow(prep$data), sum(y), prep$n_drop),
-      sprintf("CI 方法: %s", if (ci_method == "wald") "Wald" else "剖面似然")),
-    ci_method = ci_method, n = nrow(prep$data), nevent = sum(y), separation = separation
-  )
-  invisible(.new_result(model = fit, result = res, info = info))
+  .reg_check_args("logit", robust, ci_method, NULL, NULL)
+  core <- .reg_core("logit", data, outcome, mainvar, covars, extra_vars, robust, conf_level, ci_method, fit_args = list(...))
+  invisible(.new_result(model = core$fit, result = core$result, info = core$info))
 }
 
 #' 线性回归
@@ -269,25 +367,8 @@ logit_run <- function(data, outcome, mainvar, covars = NULL, extra_vars = NULL, 
 #' @export
 lm_run <- function(data, outcome, mainvar, covars = NULL, extra_vars = NULL, robust = FALSE, conf_level = 0.95, ...) {
   .validate_conf_level(conf_level)
-  extra <- .split_extra(extra_vars, data, covars)
-  prep <- .prep_reg(data, outcome, mainvar, covars, robust)
-  y <- prep$data[[outcome]]
-  if (!is.numeric(y)) stop("结局 ", outcome, " 必须为数值型")
-  fit <- stats::lm(prep$formula, data = prep$data, ...)
-  vc <- .reg_vcov(fit, prep, robust)
-  est <- .reg_wald(fit, vc, conf_level)
-  describe <- function(rows) {
-    data.frame(N = sum(rows), Mean = if (any(rows)) mean(y[rows]) else NA_real_,
-               SD = if (sum(rows) > 1L) stats::sd(y[rows]) else NA_real_)
-  }
-  res <- .reg_table(prep, fit, est, c(mainvar, extra$focus), extra$coef, describe, exp_effect = FALSE)
-  s <- summary(fit)
-  info <- .reg_info(
-    "线性回归", prep, vc, conf_level,
-    sprintf("分析样本: %d 例（剔除缺失 %d 行）；R² = %.3f，调整 R² = %.3f", nrow(prep$data), prep$n_drop, s$r.squared, s$adj.r.squared),
-    n = nrow(prep$data), r_squared = s$r.squared, adj_r_squared = s$adj.r.squared
-  )
-  invisible(.new_result(model = fit, result = res, info = info))
+  core <- .reg_core("lm", data, outcome, mainvar, covars, extra_vars, robust, conf_level, fit_args = list(...))
+  invisible(.new_result(model = core$fit, result = core$result, info = core$info))
 }
 
 #' 条件逻辑回归
@@ -309,50 +390,9 @@ lm_run <- function(data, outcome, mainvar, covars = NULL, extra_vars = NULL, rob
 clogit_run <- function(data, outcome, mainvar, match_id, covars = NULL, extra_vars = NULL, robust = FALSE,
                        conf_level = 0.95, ...) {
   .validate_conf_level(conf_level)
-  if (missing(match_id) || !is.character(match_id) || length(match_id) != 1L) stop("match_id 必须为单个匹配组变量名")
-  method <- list(...)$method
-  if (isTRUE(robust) && (is.null(method) || identical(method, "exact"))) {
-    stop("survival::clogit 的精确法（method = \"exact\"，默认）不支持稳健方差；",
-         "如需稳健方差，请同时设置 method = \"approximate\"（Breslow 近似）或 \"efron\"", call. = FALSE)
-  }
-  extra <- .split_extra(extra_vars, data, covars)
-  prep <- .prep_reg(data, outcome, mainvar, covars, robust, match_id = match_id)
-  y <- prep$data[[outcome]]
-  if (is.logical(y)) y <- as.integer(y)
-  if (!is.numeric(y) || any(!y %in% c(0, 1))) stop("结局 ", outcome, " 必须为 0/1 或 TRUE/FALSE")
-  prep$data[[outcome]] <- y
-
-  ids <- prep$data[[match_id]]
-  informative <- tapply(y, ids, function(v) any(v == 1) && any(v == 0))
-  n_sets <- length(informative)
-  n_informative <- sum(informative)
-  message(sprintf("匹配组: %d 个，其中同时含病例与对照的有效匹配组 %d 个", n_sets, n_informative))
-  if (n_informative == 0L) stop("没有同时含病例与对照的匹配组")
-
-  rhs <- c(attr(stats::terms(prep$formula), "term.labels"), sprintf("strata(%s)", .bt(match_id)),
-           if (isTRUE(robust) && !is.null(prep$cluster_var)) sprintf("cluster(%s)", .bt(prep$cluster_var)))
-  fml <- stats::reformulate(rhs, response = str2lang(.bt(outcome)))
-  environment(fml) <- new.env(parent = asNamespace("survival"))
-  # clogit 在调用者环境中构造并求值 coxph(Surv(...)) 调用，需在此局部提供这两个函数
-  coxph <- survival::coxph
-  Surv <- survival::Surv
-  fit <- if (isTRUE(robust)) {
-    survival::clogit(fml, data = prep$data, robust = TRUE, ...)
-  } else {
-    survival::clogit(fml, data = prep$data, ...)
-  }
-  vc <- .reg_vcov(fit, prep, robust)
-  est <- .reg_wald(fit, vc, conf_level)
-  describe <- function(rows) {
-    data.frame(N_case = sum(y[rows] == 1), N_control = sum(y[rows] == 0))
-  }
-  res <- .reg_table(prep, fit, est, c(mainvar, extra$focus), extra$coef, describe, exp_effect = TRUE)
-  info <- .reg_info(
-    "条件逻辑回归", prep, vc, conf_level,
-    sprintf("分析样本: %d 例（病例 %d，对照 %d；剔除缺失 %d 行）；匹配组 %d 个，有效 %d 个",
-            nrow(prep$data), sum(y == 1), sum(y == 0), prep$n_drop, n_sets, n_informative),
-    n = nrow(prep$data), n_case = sum(y == 1), n_sets = n_sets, n_informative_sets = n_informative,
-    method = fit$method
-  )
-  invisible(.new_result(model = fit, result = res, info = info))
+  if (missing(match_id)) match_id <- NULL
+  .reg_check_args("clogit", robust, "wald", match_id, list(...)$method)
+  core <- .reg_core("clogit", data, outcome, mainvar, covars, extra_vars, robust, conf_level, match_id = match_id,
+                    fit_args = list(...))
+  invisible(.new_result(model = core$fit, result = core$result, info = core$info))
 }

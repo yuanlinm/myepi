@@ -34,76 +34,27 @@ cox_run_sub <- function(data, group_var, time1 = NULL, time2 = NULL, timediff = 
   t_unit <- match.arg(t_unit)
   group_na <- match.arg(group_na)
   .validate_conf_level(conf_level)
-  if (!is.data.frame(data)) stop("data 必须为数据框")
-  data <- as.data.frame(data)
-  if (!is.character(group_var) || length(group_var) != 1L || !group_var %in% names(data)) stop("分组变量不在数据框中")
-  if (group_var %in% mainvar) stop("group_var 不能同时作为 mainvar")
-
-  # 分组变量：保留因子水平顺序；缺失按 group_na 处理
-  g <- data[[group_var]]
-  g <- if (is.factor(g)) droplevels(g) else factor(g)
-  n_na <- sum(is.na(g))
-  if (n_na > 0) {
-    if (group_na == "drop") {
-      message(sprintf("分组变量 %s 有 %d 行缺失，已剔除", group_var, n_na))
-    } else {
-      g <- factor(ifelse(is.na(g), "(Missing)", as.character(g)), levels = c(levels(g), "(Missing)"))
-      message(sprintf("分组变量 %s 有 %d 行缺失，作为单独一组 (Missing)", group_var, n_na))
-    }
-  }
-  data[[group_var]] <- g
-  data <- data[!is.na(g), , drop = FALSE]
-
-  # 亚组内 group_var 为常数：剔除含 group_var 的协变量项
-  involves_group <- vapply(covars, function(term) group_var %in% all.vars(str2lang(.term_label(term, data))),
-                           logical(1), USE.NAMES = FALSE)
-  if (any(involves_group)) {
-    message("亚组模型中剔除含分组变量的协变量项: ", paste(covars[involves_group], collapse = ", "))
-  }
-  sub_covars <- covars[!involves_group]
+  grp <- .prepare_group(data, group_var, group_na, mainvar)
+  data <- grp$data
+  n_na <- grp$n_na
+  sub_covars <- .sub_covars(covars, group_var, data)
   extra <- .split_extra(extra_vars, data, sub_covars)
   focus <- c(mainvar, extra$focus)
 
-  # 各亚组模型
-  fits <- list()
-  rows <- list()
-  for (lev in levels(data[[group_var]])) {
-    label <- paste0(group_var, ": ", lev)
-    sub_data <- data[data[[group_var]] == lev, , drop = FALSE]
-    res <- tryCatch({
-      prep <- .prep_cox(sub_data, time1, time2, timediff, event, mainvar, sub_covars, idL, robust, label = label)
-      fit <- .fit_cox(prep, ...)
-      vc <- .cox_vcov(fit, robust)
-      list(fit = fit, vc = vc,
-           table = .tidy_cox(prep, fit, vc, focus, extra$coef, t_unit, incidence_scale, conf_level))
-    }, error = function(e) {
-      warning(sprintf("亚组 %s 建模失败: %s", label, conditionMessage(e)), call. = FALSE)
-      NULL
-    })
-    if (is.null(res)) next
-    fits[[label]] <- res$fit
-    rows[[label]] <- data.frame(Subgroup = label, res$table, stringsAsFactors = FALSE)
+  fit_level <- function(sub_data, label) {
+    prep <- .prep_cox(sub_data, time1, time2, timediff, event, mainvar, sub_covars, idL, robust, label = label)
+    fit <- .fit_cox(prep, ...)
+    vc <- .cox_vcov(fit, robust)
+    list(fit = fit, table = .tidy_cox(prep, fit, vc, focus, extra$coef, t_unit, incidence_scale, conf_level))
   }
-  if (length(rows) == 0L) stop("所有亚组均建模失败")
-  out <- do.call(rbind, rows)
-
-  # 交互检验（全样本）
-  inter_models <- list()
-  inter_tab <- NULL
-  if (isTRUE(interaction)) {
-    inter <- .interaction_test(data, group_var, time1, time2, timediff, event, mainvar, sub_covars, idL, robust, ...)
-    inter_models <- inter$models
-    inter_tab <- inter$table
-    out$P_interaction <- inter_tab$P[match(out$varname, inter_tab$varname)]
+  interaction_fun <- if (isTRUE(interaction)) {
+    function() .interaction_test(data, group_var, time1, time2, timediff, event, mainvar, sub_covars, idL, robust, ...)
   }
-
-  # 排序：关注变量顺序 → 亚组水平顺序 → 亚组内行序
-  sub_levels <- paste0(group_var, ": ", levels(data[[group_var]]))
-  out <- out[order(match(out$varname, unique(c(focus, out$varname))), match(out$Subgroup, sub_levels),
-                   seq_len(nrow(out))), , drop = FALSE]
-  rownames(out) <- NULL
-
-  if (isTRUE(plot_shape)) out <- .sub_plot_shape(out, group_var)
+  sub <- .run_sub(data, group_var, focus, fit_level, interaction_fun, plot_shape)
+  out <- sub$result
+  fits <- sub$fits
+  inter_models <- sub$inter_models
+  inter_tab <- sub$inter_tab
 
   vc_type <- if (length(fits) > 0) .cox_vcov(fits[[1]], robust)$type else NA_character_
   info <- list(
@@ -112,8 +63,7 @@ cox_run_sub <- function(data, group_var, time1 = NULL, time2 = NULL, timediff = 
     header = c(
       sprintf("亚组 Cox 回归: 按 %s 分为 %d 组（成功拟合 %d 组）", group_var, nlevels(data[[group_var]]), length(fits)),
       sprintf("方差估计: %s；置信水平: %g%%", if (identical(vc_type, "robust")) "稳健（三明治）方差" else "模型方差", 100 * conf_level),
-      if (!is.null(inter_tab)) sprintf("交互检验（%s）: %s", inter_tab$test[1],
-                                      paste0(inter_tab$varname, " P = ", format.pval(inter_tab$P, digits = 3, eps = 0.001), collapse = "; "))
+      .inter_header(inter_tab)
     )
   )
   invisible(.new_result(model = list(subgroups = fits, interaction = inter_models), result = out,
@@ -170,4 +120,76 @@ cox_run_sub <- function(data, group_var, time1 = NULL, time2 = NULL, timediff = 
   formatted <- formatted[, c("Group", "Subgroup", setdiff(names(formatted), c("Group", "Subgroup", "varname"))), drop = FALSE]
   rownames(formatted) <- NULL
   formatted
+}
+
+# ---- 亚组分析共用：分组变量、协变量处理、逐亚组拟合、交互检验、排序与绘图格式 ----
+
+# 分组变量：保留因子水平顺序；缺失按 group_na 剔除或单列为 "(Missing)"
+.prepare_group <- function(data, group_var, group_na, mainvar) {
+  if (!is.data.frame(data)) stop("data 必须为数据框")
+  data <- as.data.frame(data)
+  if (!is.character(group_var) || length(group_var) != 1L || !group_var %in% names(data)) stop("分组变量不在数据框中")
+  if (group_var %in% mainvar) stop("group_var 不能同时作为 mainvar")
+  g <- data[[group_var]]
+  g <- if (is.factor(g)) droplevels(g) else factor(g)
+  n_na <- sum(is.na(g))
+  if (n_na > 0) {
+    if (group_na == "drop") {
+      message(sprintf("分组变量 %s 有 %d 行缺失，已剔除", group_var, n_na))
+    } else {
+      g <- factor(ifelse(is.na(g), "(Missing)", as.character(g)), levels = c(levels(g), "(Missing)"))
+      message(sprintf("分组变量 %s 有 %d 行缺失，作为单独一组 (Missing)", group_var, n_na))
+    }
+  }
+  data[[group_var]] <- g
+  list(data = data[!is.na(g), , drop = FALSE], n_na = n_na)
+}
+
+# 亚组内 group_var 为常数：剔除含 group_var 的协变量项
+.sub_covars <- function(covars, group_var, data) {
+  involves <- vapply(covars, function(term) group_var %in% all.vars(str2lang(.term_label(term, data))),
+                     logical(1), USE.NAMES = FALSE)
+  if (any(involves)) message("亚组模型中剔除含分组变量的协变量项: ", paste(covars[involves], collapse = ", "))
+  covars[!involves]
+}
+
+# fit_level(sub_data, label) 返回 list(fit, table)；interaction_fun() 返回 list(models, table)，为 NULL 时不做交互检验
+.run_sub <- function(data, group_var, focus, fit_level, interaction_fun, plot_shape) {
+  fits <- list()
+  rows <- list()
+  for (lev in levels(data[[group_var]])) {
+    label <- paste0(group_var, ": ", lev)
+    res <- tryCatch(fit_level(data[data[[group_var]] == lev, , drop = FALSE], label), error = function(e) {
+      warning(sprintf("亚组 %s 建模失败: %s", label, conditionMessage(e)), call. = FALSE)
+      NULL
+    })
+    if (is.null(res)) next
+    fits[[label]] <- res$fit
+    rows[[label]] <- data.frame(Subgroup = label, res$table, stringsAsFactors = FALSE)
+  }
+  if (length(rows) == 0L) stop("所有亚组均建模失败")
+  out <- do.call(rbind, rows)
+
+  inter_models <- list()
+  inter_tab <- NULL
+  if (!is.null(interaction_fun)) {
+    inter <- interaction_fun()
+    inter_models <- inter$models
+    inter_tab <- inter$table
+    out$P_interaction <- inter_tab$P[match(out$varname, inter_tab$varname)]
+  }
+
+  # 排序：关注变量顺序 → 亚组水平顺序 → 亚组内行序
+  sub_levels <- paste0(group_var, ": ", levels(data[[group_var]]))
+  out <- out[order(match(out$varname, unique(c(focus, out$varname))), match(out$Subgroup, sub_levels),
+                   seq_len(nrow(out))), , drop = FALSE]
+  rownames(out) <- NULL
+  if (isTRUE(plot_shape)) out <- .sub_plot_shape(out, group_var)
+  list(result = out, fits = fits, inter_models = inter_models, inter_tab = inter_tab)
+}
+
+.inter_header <- function(inter_tab) {
+  if (is.null(inter_tab)) return(NULL)
+  sprintf("交互检验（%s）: %s", inter_tab$test[1],
+          paste0(inter_tab$varname, " P = ", format.pval(inter_tab$P, digits = 3, eps = 0.001), collapse = "; "))
 }
