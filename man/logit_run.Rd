@@ -42,5 +42,7 @@ logit_run(
 }
 \description{
 调用 \code{glm(family = binomial)}；输出暴露各水平的病例数/总人数、OR 及 CI、P 值。
+检测（准）完全分离并给出警告：模型中分类变量的某水平只含事件或只含非事件，或 glm 提示不收敛/拟合概率为 0 或 1；
+结果照常返回，\code{info$separation} 记录是否检出。
 拟合前按完整病例生成分析样本并以 message 报告缺失处理。
 }

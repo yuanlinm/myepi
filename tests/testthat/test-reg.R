@@ -15,7 +15,7 @@ make_infert <- function() {
 
 test_that("logit_run matches glm with Wald and profile CIs", {
   d <- make_bin()
-  r <- quiet(logit_run(d, outcome = "y", mainvar = "ecog", covars = c("age", "sex")))
+  r <- suppressWarnings(quiet(logit_run(d, outcome = "y", mainvar = "ecog", covars = c("age", "sex"))))
   dd <- d[!is.na(d$ecog), ]
   fit <- glm(y ~ ecog + age + sex, family = binomial, data = dd)
   idx <- c("ecog1", "ecog2", "ecog3")
@@ -123,4 +123,18 @@ test_that("plot_forest detects OR and beta measures", {
   expect_true(grepl("0.00 (Ref)", pdf_text(path2), fixed = TRUE))
 
   expect_error(plot_forest(list(lo, li), file = tempfile(fileext = ".pdf"), font_family = font))
+})
+
+test_that("logit_run warns about separation", {
+  d <- make_bin()
+  expect_warning(r <- quiet(logit_run(d, "y", "ecog", covars = "age")), "ecog = 3")
+  expect_true(r$info$separation)
+  set.seed(1)
+  sep <- data.frame(x = c(rnorm(50, -2), rnorm(50, 2)), y = rep(0:1, each = 50))
+  sep$y[sep$x < 0] <- 0L
+  sep$y[sep$x > 0] <- 1L
+  expect_warning(quiet(logit_run(sep, "y", "x")), "glm")
+  d$ecog2 <- factor(pmin(d$ph.ecog, 2))
+  expect_no_warning(r2 <- quiet(logit_run(d, "y", "ecog2", covars = "age")))
+  expect_false(r2$info$separation)
 })

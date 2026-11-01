@@ -62,6 +62,31 @@
   as.integer(y)
 }
 
+# 分离检测：(1) 模型中各分类变量是否存在只含事件或只含非事件的水平（单变量准完全分离，glm 不会提示）；
+# (2) 拟合过程中 glm 关于不收敛或拟合概率为 0/1 的警告。仅给出警告，不改变结果
+.check_separation <- function(prep, y, glm_warnings = character()) {
+  vars <- intersect(c(all.vars(prep$formula)[-1]), names(prep$data))
+  issues <- character()
+  for (v in vars) {
+    x <- prep$data[[v]]
+    if (!(is.factor(x) || is.character(x) || is.logical(x))) next
+    tab <- table(factor(as.character(x)), y)
+    if (ncol(tab) < 2L) next
+    bad <- rownames(tab)[tab[, 1] == 0 | tab[, 2] == 0]
+    if (length(bad) > 0L) {
+      issues <- c(issues, sprintf("%s = %s（%s）", v, bad, ifelse(tab[bad, 1] == 0, "全部为事件", "无事件")))
+    }
+  }
+  sep_warn <- unique(glm_warnings[grepl("fitted probabilities numerically 0 or 1|did not converge", glm_warnings)])
+  if (length(issues) > 0L || length(sep_warn) > 0L) {
+    warning("可能存在（准）完全分离，相关 OR 及其 CI 不可靠：",
+            paste(c(issues, if (length(sep_warn)) paste0("glm: ", sep_warn)), collapse = "；"),
+            "。可考虑合并稀疏水平或改用 Firth 校正逻辑回归", call. = FALSE)
+    return(invisible(TRUE))
+  }
+  invisible(FALSE)
+}
+
 # 模型项对应的系数位置：coxph 的 assign 为列表；lm/glm 的 assign 为模型矩阵列号到项序号的向量
 .coef_index <- function(fit, term) {
   if (is.list(fit$assign)) return(fit$assign[[term]])
@@ -177,6 +202,8 @@
 #' 逻辑回归
 #'
 #' 调用 \code{glm(family = binomial)}；输出暴露各水平的病例数/总人数、OR 及 CI、P 值。
+#' 检测（准）完全分离并给出警告：模型中分类变量的某水平只含事件或只含非事件，或 glm 提示不收敛/拟合概率为 0 或 1；
+#' 结果照常返回，\code{info$separation} 记录是否检出。
 #' 拟合前按完整病例生成分析样本并以 message 报告缺失处理。
 #'
 #' @param data 数据框
@@ -200,7 +227,17 @@ logit_run <- function(data, outcome, mainvar, covars = NULL, extra_vars = NULL, 
   extra <- .split_extra(extra_vars, data, covars)
   prep <- .prep_reg(data, outcome, mainvar, covars, robust)
   prep$data[[outcome]] <- .binary_outcome(prep$data[[outcome]], outcome)
-  fit <- stats::glm(prep$formula, data = prep$data, family = stats::binomial(), ...)
+  glm_warnings <- character()
+  fit <- withCallingHandlers(
+    stats::glm(prep$formula, data = prep$data, family = stats::binomial(), ...),
+    warning = function(w) {
+      if (grepl("fitted probabilities numerically 0 or 1|did not converge", conditionMessage(w))) {
+        glm_warnings <<- c(glm_warnings, conditionMessage(w))
+        invokeRestart("muffleWarning")
+      }
+    }
+  )
+  separation <- .check_separation(prep, prep$data[[outcome]], glm_warnings)
   vc <- .reg_vcov(fit, prep, robust)
   est <- .reg_wald(fit, vc, conf_level, ci_method)
   y <- prep$data[[outcome]]
@@ -214,7 +251,7 @@ logit_run <- function(data, outcome, mainvar, covars = NULL, extra_vars = NULL, 
     "逻辑回归", prep, vc, conf_level,
     c(sprintf("分析样本: %d 例，事件 %d（剔除缺失 %d 行）", nrow(prep$data), sum(y), prep$n_drop),
       sprintf("CI 方法: %s", if (ci_method == "wald") "Wald" else "剖面似然")),
-    ci_method = ci_method, n = nrow(prep$data), nevent = sum(y)
+    ci_method = ci_method, n = nrow(prep$data), nevent = sum(y), separation = separation
   )
   invisible(.new_result(model = fit, result = res, info = info))
 }
