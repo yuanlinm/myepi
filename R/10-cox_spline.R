@@ -42,3 +42,59 @@
                sprintf("方差估计: %s；置信水平: %g%%", if (isTRUE(robust)) "稳健（三明治）方差" else "模型方差", 100 * conf_level))
   )
 }
+
+# ---- RCS 共用：节点、参照值、rms::anova 检验 ----
+
+# 节点：knots（绝对值）、knot_probs（分位数）或 nk（Harrell 默认分位数，Hmisc::rcspline.eval）三选一
+.rcs_knots <- function(basis, nk, knots, knot_probs, mainvar) {
+  if (!is.null(knots) && !is.null(knot_probs)) stop("knots 与 knot_probs 只能二选一")
+  if (!is.null(knots)) {
+    if (!is.numeric(knots) || length(knots) < 3L || anyNA(knots) || anyDuplicated(knots)) stop("knots 至少需要 3 个互不相同的数值")
+    knots <- sort(knots)
+    knot_rule <- "用户指定（绝对值）"
+  } else if (!is.null(knot_probs)) {
+    if (!is.numeric(knot_probs) || length(knot_probs) < 3L || anyNA(knot_probs) || any(knot_probs <= 0 | knot_probs >= 1)) {
+      stop("knot_probs 至少需要 3 个 (0, 1) 内的概率")
+    }
+    knot_probs <- sort(knot_probs)
+    knots <- stats::quantile(basis, knot_probs, names = FALSE)
+    if (anyDuplicated(knots)) stop("按 knot_probs 计算的节点存在重复值，请调整分位数或改用 knots")
+    knot_rule <- sprintf("用户指定分位数 %s", paste(knot_probs, collapse = ", "))
+  } else {
+    if (!is.numeric(nk) || length(nk) != 1L || !nk %in% 3:7) stop("nk 必须为 3 到 7 的整数")
+    knots <- Hmisc::rcspline.eval(basis, nk = nk, knots.only = TRUE)
+    if (length(knots) < nk) warning(sprintf("%s 取值重复较多，实际仅得到 %d 个节点", mainvar, length(knots)), call. = FALSE)
+    knot_rule <- "Harrell 默认分位数"
+  }
+  if (length(knots) < 3L) stop("至少需要 3 个节点")
+  message(sprintf("RCS 节点（k = %d，%s）: %s", length(knots), knot_rule, paste(format(knots, digits = 4), collapse = ", ")))
+  knots
+}
+
+# 参照值：默认中位数，须在观测范围内
+.rcs_ref <- function(ref, basis, x, mainvar, measure) {
+  if (is.null(ref)) ref <- stats::median(basis)
+  if (!is.numeric(ref) || length(ref) != 1L || !is.finite(ref) || ref < min(x) || ref > max(x)) {
+    stop("ref 必须为 mainvar 观测范围内的单个数值")
+  }
+  message(sprintf("参照值（%s = %s）: %s = %s", measure, if (measure == "beta") "0" else "1", mainvar, format(ref, digits = 4)))
+  ref
+}
+
+# rms::anova 中 mainvar 的总体与非线性检验（Wald χ²；ols 为 F）
+.rms_tests <- function(fit, mainvar) {
+  a <- stats::anova(fit)
+  row_overall <- match(mainvar, rownames(a))
+  row_nonlinear <- row_overall + 1L
+  if (is.na(row_overall) || trimws(rownames(a)[row_nonlinear]) != "Nonlinear") stop("无法从 anova 结果中定位 mainvar 的检验")
+  rows <- c(row_overall, row_nonlinear)
+  is_f <- "F" %in% colnames(a)
+  data.frame(
+    test = c("overall", "nonlinear"),
+    method = if (is_f) sprintf("F (rms::anova), 分母自由度 %d", as.integer(a["ERROR", "d.f."])) else "Wald (rms::anova)",
+    statistic = unname(a[rows, if (is_f) "F" else "Chi-Square"]),
+    df = unname(a[rows, "d.f."]),
+    P = unname(a[rows, "P"]),
+    stringsAsFactors = FALSE
+  )
+}
