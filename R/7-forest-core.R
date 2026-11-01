@@ -21,6 +21,33 @@
   as.character(0:9)
 )
 
+# 效应量：myepi 结果中的列名、默认轴标题、缩写与无效值
+.FP_MEASURES <- list(
+  HR = list(cols = c("HR", "HR_lower", "HR_upper"), label = "Hazard ratio", abbr = "HR", null = 1),
+  OR = list(cols = c("OR", "OR_lower", "OR_upper"), label = "Odds ratio", abbr = "OR", null = 1),
+  beta = list(cols = c("beta", "lower", "upper"), label = "Beta", abbr = "Beta", null = 0)
+)
+
+.fp_result_measure <- function(r) {
+  for (m in names(.FP_MEASURES)) if (all(.FP_MEASURES[[m]]$cols %in% names(r))) return(m)
+  stop("myepi 结果中未找到 HR、OR 或 beta 效应量列", call. = FALSE)
+}
+
+.fp_collect_results <- function(x) {
+  if (inherits(x, "myepi_result")) return(list(x))
+  if (is.list(x) && !is.data.frame(x)) return(unlist(lapply(x, .fp_collect_results), recursive = FALSE))
+  list()
+}
+
+# 输入中 myepi 结果的效应量类型；数据框输入返回 NULL
+.fp_input_measure <- function(x) {
+  results <- .fp_collect_results(x)
+  if (length(results) == 0L) return(NULL)
+  m <- unique(vapply(results, function(r) .fp_result_measure(r$result), character(1)))
+  if (length(m) > 1L) stop("同一张图中混合了不同的效应量（", paste(m, collapse = ", "), "）", call. = FALSE)
+  m
+}
+
 # 绘图状态：当前字体与已绘制文本（供 pdftotext 校验）
 .fp_state <- new.env(parent = emptyenv())
 

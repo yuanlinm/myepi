@@ -14,9 +14,9 @@ plot_forest(
   ref_col = NULL,
   labels = NULL,
   exclude = NULL,
-  effect_axis_label = "Hazard ratio",
-  effect_abbreviation = "HR",
-  null_value = 1,
+  effect_axis_label = NULL,
+  effect_abbreviation = NULL,
+  null_value = NULL,
   scale = c("linear", "log"),
   x_min = NULL,
   x_max = NULL,
@@ -46,20 +46,22 @@ plot_forest(
 
 \item{subgroup_col, category_col}{仅数据框输入：亚组（加粗标题行）列与类别（缩进行）列}
 
-\item{count_cols}{可选计数列（字符向量；具名时以名称作为列标题），如 \code{c(Events = "N_event", Total = "N_total")}}
+\item{count_cols}{可选计数列（字符向量；具名时以名称作为列标题），如 \code{c(Events = "N_event", Total = "N_total")}；
+myepi 结果可用 N_event、N_total、N_case、N_control、N}
 
-\item{ref_col}{仅数据框输入：逻辑列，标记参照行（显示 "1.00 (Ref)"，不画 CI）}
+\item{ref_col}{仅数据框输入：逻辑列，标记参照行（显示 "无效值 (Ref)"，如 "1.00 (Ref)"，不画 CI）}
 
 \item{labels}{可选具名字符向量，将亚组/类别的原始标签（名称）精确替换为显示标签（值），
 如 \code{c(sex_f = "Sex", age_group = "Age")}}
 
 \item{exclude}{按精确标签剔除显示行："亚组|类别"，或 "亚组|*" 剔除整个亚组（使用替换后的显示标签）}
 
-\item{effect_axis_label}{效应量名称（轴标题与列标题），如 "Hazard ratio"、"Odds ratio"}
+\item{effect_axis_label}{效应量名称（轴标题与列标题）；NULL 时按输入自动确定：HR 为 "Hazard ratio"，
+OR（\code{logit_run}、\code{clogit_run}）为 "Odds ratio"，beta（\code{lm_run}）为 "Beta"；数据框输入默认 "Hazard ratio"}
 
-\item{effect_abbreviation}{效应量缩写（用于 footer_note = "AUTO"）}
+\item{effect_abbreviation}{效应量缩写（用于 footer_note = "AUTO"）；NULL 时按输入自动确定}
 
-\item{null_value}{无效值：比值类为 1，差值类为 0}
+\item{null_value}{无效值；NULL 时按输入自动确定：比值类（HR、OR）为 1，beta 为 0}
 
 \item{scale}{"linear"（默认）或 "log"}
 
@@ -103,7 +105,8 @@ plot_forest(
   \item \code{cox_run_sub} 结果：每个结果为一个亚组块（标题为分组变量，类别为各水平），
     \code{P_interaction} 显示在标题行；分类暴露时显示各非参照水平。
   \item \code{cox_run_q} 结果：一个块，类别为各分位组，参照组显示 "1.00 (Ref)"；有趋势检验时显示 P for trend。
-  \item \code{cox_run} 结果：每个关注变量一个块；数值变量折叠为一行。
+  \item \code{cox_run}、\code{logit_run}、\code{clogit_run}、\code{lm_run} 结果：每个关注变量一个块；数值变量折叠为一行。
+    效应量（HR、OR、beta）、轴标题与无效值自动识别。
   \item 上述结果组成的无名列表：按顺序堆叠为同一面板中的多个块；具名列表：每个元素为一个面板（1–3 个），
     各面板的行必须一一对应。
   \item 数据框：按 \code{subgroup_col}、\code{category_col} 与 \code{panels} 的列映射作图（与 skill 的 CLI 等价）。
