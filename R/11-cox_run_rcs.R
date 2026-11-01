@@ -39,35 +39,8 @@ cox_run_rcs <- function(data, time1 = NULL, time2 = NULL, timediff = NULL, event
   bad_names <- model_vars[make.names(model_vars) != model_vars]
   if (length(bad_names) > 0L) stop("rms::cph 要求变量名符合 R 语法，请先重命名: ", paste(bad_names, collapse = ", "))
 
-  # 节点
-  if (!is.null(knots) && !is.null(knot_probs)) stop("knots 与 knot_probs 只能二选一")
-  if (!is.null(knots)) {
-    if (!is.numeric(knots) || length(knots) < 3L || anyNA(knots) || anyDuplicated(knots)) stop("knots 至少需要 3 个互不相同的数值")
-    knots <- sort(knots)
-    knot_rule <- "用户指定（绝对值）"
-  } else if (!is.null(knot_probs)) {
-    if (!is.numeric(knot_probs) || length(knot_probs) < 3L || anyNA(knot_probs) || any(knot_probs <= 0 | knot_probs >= 1)) {
-      stop("knot_probs 至少需要 3 个 (0, 1) 内的概率")
-    }
-    knot_probs <- sort(knot_probs)
-    knots <- stats::quantile(basis, knot_probs, names = FALSE)
-    if (anyDuplicated(knots)) stop("按 knot_probs 计算的节点存在重复值，请调整分位数或改用 knots")
-    knot_rule <- sprintf("用户指定分位数 %s", paste(knot_probs, collapse = ", "))
-  } else {
-    if (!is.numeric(nk) || length(nk) != 1L || !nk %in% 3:7) stop("nk 必须为 3 到 7 的整数")
-    knots <- Hmisc::rcspline.eval(basis, nk = nk, knots.only = TRUE)
-    if (length(knots) < nk) warning(sprintf("%s 取值重复较多，实际仅得到 %d 个节点", mainvar, length(knots)), call. = FALSE)
-    knot_rule <- "Harrell 默认分位数"
-  }
-  if (length(knots) < 3L) stop("至少需要 3 个节点")
-  message(sprintf("RCS 节点（k = %d，%s）: %s", length(knots), knot_rule, paste(format(knots, digits = 4), collapse = ", ")))
-
-  # 参照值
-  if (is.null(ref)) ref <- stats::median(basis)
-  if (!is.numeric(ref) || length(ref) != 1L || !is.finite(ref) || ref < min(ana[[mainvar]]) || ref > max(ana[[mainvar]])) {
-    stop("ref 必须为 mainvar 观测范围内的单个数值")
-  }
-  message(sprintf("参照值（HR = 1）: %s = %s", mainvar, format(ref, digits = 4)))
+  knots <- .rcs_knots(basis, nk, knots, knot_probs, mainvar)
+  ref <- .rcs_ref(ref, basis, ana[[mainvar]], mainvar, "HR")
 
   # cph 公式：strata() → strat()；cluster() 不进入公式，由 robcov 处理
   is_cluster <- grepl("^\\s*cluster\\s*\\(", prep$covars)
@@ -102,18 +75,7 @@ cox_run_rcs <- function(data, time1 = NULL, time2 = NULL, timediff = NULL, event
     fit <- if (is.null(cluster_var)) rms::robcov(fit) else rms::robcov(fit, cluster = ana[[cluster_var]])
   }
 
-  a <- stats::anova(fit)
-  row_overall <- match(mainvar, rownames(a))
-  row_nonlinear <- row_overall + 1L
-  if (is.na(row_overall) || trimws(rownames(a)[row_nonlinear]) != "Nonlinear") stop("无法从 anova 结果中定位 mainvar 的检验")
-  tests <- data.frame(
-    test = c("overall", "nonlinear"),
-    method = "Wald (rms::anova)",
-    statistic = unname(a[c(row_overall, row_nonlinear), "Chi-Square"]),
-    df = unname(a[c(row_overall, row_nonlinear), "d.f."]),
-    P = unname(a[c(row_overall, row_nonlinear), "P"]),
-    stringsAsFactors = FALSE
-  )
+  tests <- .rms_tests(fit, mainvar)
 
   pred_args <- c(list(fit), stats::setNames(list(setup$grid), mainvar),
                  list(ref.zero = TRUE, fun = exp, conf.int = conf_level))

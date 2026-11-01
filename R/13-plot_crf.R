@@ -1,16 +1,17 @@
 #' 剂量反应曲线图（CRF）
 #'
-#' 直接读取 \code{cox_run_rcs} 或 \code{cox_run_psp} 的曲线数据（x、hr、ll、ul），按固定样式输出单页矢量 PDF：
-#' 仅左轴与底轴、刻度朝外、无网格；坐标轴两端各留 5\% 空白；HR = 1 处为贯穿面板的灰色虚线；
+#' 直接读取 \code{cox_run_rcs}、\code{cox_run_psp}、\code{logit_run_rcs}、\code{clogit_run_rcs} 或 \code{lm_run_rcs} 的
+#' 曲线数据（x 与 hr / or / beta、ll、ul），按固定样式输出单页矢量 PDF：
+#' 仅左轴与底轴、刻度朝外、无网格；坐标轴两端各留 5\% 空白；无效值处（HR、OR 为 1，beta 为 0）为贯穿面板的灰色虚线；
 #' 曲线为实线，CI 为阴影（可选）及上下边线（可选，两端不封口）。
 #' 字体嵌入、文本提取与线宽校验与 \code{plot_forest} 相同；任一校验失败不生成文件。
 #'
-#' @param x \code{cox_run_rcs} 或 \code{cox_run_psp} 的返回对象
+#' @param x \code{cox_run_rcs}、\code{cox_run_psp}、\code{logit_run_rcs}、\code{clogit_run_rcs} 或 \code{lm_run_rcs} 的返回对象
 #' @param file 输出 PDF 路径（以 .pdf 结尾）
 #' @param xlab x 轴标题，默认为暴露变量名。可为字符（可含 µ、³ 等 Unicode 字符）或 plotmath 表达式，
 #'   如 \code{expression(PM[2.5]~"(µg/m"^3*")")}；表达式中请勿使用 plotmath 希腊字母（会引入 Symbol 字体而无法通过字体校验）
-#' @param ylab y 轴标题，默认 "Hazard Ratio"
-#' @param ylim y 轴范围（长度 2）；默认 NULL 时包含全部 CI 与 1，并两端各扩展 5\%。超出范围的部分在面板内裁剪
+#' @param ylab y 轴标题；NULL 时按效应量自动确定："Hazard Ratio"、"Odds Ratio" 或 "Beta"
+#' @param ylim y 轴范围（长度 2）；默认 NULL 时包含全部 CI 与无效值，并两端各扩展 5\%。超出范围的部分在面板内裁剪
 #' @param line_color,line_width,line_alpha 曲线颜色、线宽（pt）与透明度（0–1）
 #' @param ci_fill 是否绘制 CI 阴影，默认 TRUE
 #' @param ci_fill_color,ci_fill_alpha CI 阴影颜色与透明度
@@ -21,19 +22,23 @@
 #' @param overwrite 是否允许替换已存在的输出文件，默认 FALSE
 #' @return 不可见地返回 \code{myepi_forest} 对象（\code{summary}、\code{file}）；用 \code{print()} 查看
 #' @export
-plot_crf <- function(x, file, xlab = NULL, ylab = "Hazard Ratio", ylim = NULL,
+plot_crf <- function(x, file, xlab = NULL, ylab = NULL, ylim = NULL,
                      line_color = "black", line_width = 0.75, line_alpha = 1,
                      ci_fill = TRUE, ci_fill_color = "grey60", ci_fill_alpha = 0.35,
                      ci_border = FALSE, ci_border_color = "black", ci_border_width = 0.5, ci_border_alpha = 1,
                      width_mm = 140, height_mm = 110, font_family = "Helvetica", overwrite = FALSE) {
   if (!inherits(x, "myepi_result") || !isTRUE(x$info$method %in% c("rcs", "psp"))) {
-    stop("x 必须为 cox_run_rcs 或 cox_run_psp 的返回对象", call. = FALSE)
+    stop("x 必须为 cox_run_rcs、cox_run_psp、logit_run_rcs、clogit_run_rcs 或 lm_run_rcs 的返回对象", call. = FALSE)
   }
   curve <- x$result
-  if (!all(c("x", "hr", "ll", "ul") %in% names(curve)) || nrow(curve) < 2L ||
-      any(!is.finite(as.matrix(curve[c("x", "hr", "ll", "ul")])))) {
-    stop("曲线数据需包含有限的 x、hr、ll、ul 列", call. = FALSE)
+  est_col <- intersect(names(.CRF_MEASURES), names(curve))
+  if (length(est_col) != 1L || !all(c("x", "ll", "ul") %in% names(curve)) || nrow(curve) < 2L ||
+      any(!is.finite(as.matrix(curve[c("x", est_col, "ll", "ul")])))) {
+    stop("曲线数据需包含有限的 x、ll、ul 列及 hr、or、beta 之一", call. = FALSE)
   }
+  measure <- .CRF_MEASURES[[est_col]]
+  curve <- data.frame(x = curve$x, est = curve[[est_col]], ll = curve$ll, ul = curve$ul)
+  if (is.null(ylab)) ylab <- measure$ylab
   if (is.null(xlab)) xlab <- x$info$mainvar
   for (col in c(line_color, ci_fill_color, ci_border_color)) {
     tryCatch(grDevices::col2rgb(col), error = function(e) stop("颜色无效: ", col, call. = FALSE))
@@ -57,7 +62,7 @@ plot_crf <- function(x, file, xlab = NULL, ylab = "Hazard Ratio", ylim = NULL,
   .fp_with_utf8({
     .fp_reset(font_family)
     .fp_validate_font(font_family)
-    plan <- .fp_with_measuring_device(.crf_plan(curve, xlab, ylab, ylim, width_mm, height_mm))
+    plan <- .fp_with_measuring_device(.crf_plan(curve, xlab, ylab, ylim, width_mm, height_mm, measure$null))
     rendered <- .fp_render(
       file, overwrite, font_family,
       function(path) .crf_draw(path, curve, plan, lwd, list(
@@ -72,7 +77,8 @@ plot_crf <- function(x, file, xlab = NULL, ylab = "Hazard Ratio", ylim = NULL,
   summary <- list(
     status = "ok",
     output = rendered$output,
-    source = sprintf("%s (%s), %d points", x$info$mainvar, x$info$method, nrow(curve)),
+    source = sprintf("%s (%s%s), %d points, %s", x$info$mainvar, x$info$method,
+                     if (is.null(x$info$model)) "" else paste0(", ", x$info$model), nrow(curve), est_col),
     size_mm = sprintf("%.1f x %.1f", width_mm, height_mm),
     x_axis = paste0("limits=", signif(plan$xlim[1], 6), " to ", signif(plan$xlim[2], 6), ", ticks=", paste(plan$xticks, collapse = ",")),
     y_axis = paste0("limits=", signif(plan$ylim[1], 6), " to ", signif(plan$ylim[2], 6), ", ticks=", paste(plan$yticks, collapse = ","),
@@ -86,6 +92,13 @@ plot_crf <- function(x, file, xlab = NULL, ylab = "Hazard Ratio", ylim = NULL,
   if (plan$clipped) warning("曲线或 CI 超出 ylim，已在面板内裁剪", call. = FALSE)
   invisible(structure(list(file = rendered$output, summary = summary), class = "myepi_forest"))
 }
+
+# 曲线效应量列：默认 y 轴标题与无效值
+.CRF_MEASURES <- list(
+  hr = list(ylab = "Hazard Ratio", null = 1),
+  or = list(ylab = "Odds Ratio", null = 1),
+  beta = list(ylab = "Beta", null = 0)
+)
 
 .CRF_STYLE <- list(
   tick_text = 8, title = 10, tick_length = 1.0, tick_label_gap = 0.8, title_gap = 1.8,
@@ -116,11 +129,11 @@ plot_crf <- function(x, file, xlab = NULL, ylab = "Hazard Ratio", ylim = NULL,
     height = grid::convertHeight(grid::grobHeight(grob), "mm", valueOnly = TRUE))
 }
 
-.crf_plan <- function(curve, xlab, ylab, ylim, width_mm, height_mm) {
+.crf_plan <- function(curve, xlab, ylab, ylim, width_mm, height_mm, null_value) {
   style <- .CRF_STYLE
   xr <- range(curve$x)
   xlim <- xr + c(-1, 1) * style$expand * diff(xr)
-  data_y <- range(c(curve$ll, curve$ul, 1))
+  data_y <- range(c(curve$ll, curve$ul, null_value))
   if (is.null(ylim)) ylim <- data_y + c(-1, 1) * style$expand * diff(data_y)
   clipped <- min(curve$ll) < ylim[1] || max(curve$ul) > ylim[2]
 
@@ -140,7 +153,7 @@ plot_crf <- function(x, file, xlab = NULL, ylab = "Hazard Ratio", ylim = NULL,
 
   list(xlim = xlim, ylim = ylim, xticks = x$ticks, xlabels = x$labels, yticks = y$ticks, ylabels = y$labels,
        left = left, bottom = bottom, panel_w = panel_w, panel_h = panel_h, width = width_mm, height = height_mm,
-       xlab = xlab, ylab = ylab, clipped = clipped)
+       xlab = xlab, ylab = ylab, clipped = clipped, null_value = null_value)
 }
 
 .crf_draw <- function(path, curve, plan, lwd, opt) {
@@ -163,8 +176,8 @@ plot_crf <- function(x, file, xlab = NULL, ylab = "Hazard Ratio", ylim = NULL,
       gp = grid::gpar(col = NA, fill = opt$ci_fill_color, alpha = opt$ci_fill_alpha)
     )
   }
-  if (plan$ylim[1] <= 1 && plan$ylim[2] >= 1) {
-    grid::grid.lines(x = plan$xlim, y = c(1, 1), default.units = "native",
+  if (plan$ylim[1] <= plan$null_value && plan$ylim[2] >= plan$null_value) {
+    grid::grid.lines(x = plan$xlim, y = rep(plan$null_value, 2), default.units = "native",
                      gp = grid::gpar(col = style$ref_col, lwd = .FP_STRUCTURE_LWD, lty = "dashed", lineend = "butt"))
   }
   if (opt$ci_border) {
@@ -172,7 +185,7 @@ plot_crf <- function(x, file, xlab = NULL, ylab = "Hazard Ratio", ylim = NULL,
     grid::grid.lines(x = curve$x, y = curve$ll, default.units = "native", gp = border_gp)
     grid::grid.lines(x = curve$x, y = curve$ul, default.units = "native", gp = border_gp)
   }
-  grid::grid.lines(x = curve$x, y = curve$hr, default.units = "native",
+  grid::grid.lines(x = curve$x, y = curve$est, default.units = "native",
                    gp = grid::gpar(col = opt$line_color, lwd = lwd$line, alpha = opt$line_alpha, lineend = "butt", linejoin = "round"))
   grid::popViewport()
 

@@ -104,7 +104,7 @@ res <- logit_run(df, outcome = "case", mainvar = "exposure", covars = c("age", "
 res$result   # 各水平的病例数/总人数、OR、95% CI、P
 ```
 
-基于 `glm(family = binomial)`。结局可为 0/1、TRUE/FALSE 或二水平因子（第二个水平为事件）。`ci_method = "wald"`（默认）或 `"profile"`（剖面似然）；`robust = TRUE` 时用 `sandwich` 稳健方差（有 `cluster()` 时按其聚类）。
+基于 `glm(family = binomial)`。结局可为 0/1、TRUE/FALSE 或二水平因子（第二个水平为事件）。检出（准）完全分离时给出警告。`ci_method = "wald"`（默认）或 `"profile"`（剖面似然）；`robust = TRUE` 时用 `sandwich` 稳健方差（有 `cluster()` 时按其聚类）。
 
 ### clogit_run：条件逻辑回归
 
@@ -123,6 +123,18 @@ res$result   # 各水平的人数、结局均值与标准差、beta、95% CI、P
 ```
 
 基于 `lm`，推断采用 t 分布；`res$info` 含 R² 与调整 R²。
+
+### logit_run_rcs / clogit_run_rcs / lm_run_rcs：回归模型的限制性立方样条
+
+```r
+res <- logit_run_rcs(df, outcome = "case", mainvar = "pm25", covars = c("age", "sex"))
+res <- clogit_run_rcs(df, outcome = "case", mainvar = "pm25", match_id = "set_id")
+res <- lm_run_rcs(df, outcome = "sbp", mainvar = "pm25", covars = c("age", "sex"))
+res$result   # 500 点曲线：x 与 or（或 beta）、ll、ul（相对参照值）
+res$tests    # 总体关联与非线性检验
+```
+
+节点、参照值与预测范围的参数同 `cox_run_rcs`。`logit_run_rcs` 与 `lm_run_rcs` 基于 `rms::lrm` / `rms::ols` + `Predict()` + `anova()`（线性回归为 t 分布 CI 与 F 检验）；`clogit_run_rcs` 基于 `survival::clogit` 与相同的样条基函数，对比与检验的定义同 `Predict()` / `anova()`。匹配变量在匹配组内无变异，不能作为 `clogit_run_rcs` 的暴露。
 
 ### plot_forest：森林图（表格式）
 
@@ -154,7 +166,7 @@ plot_crf(res, file = "crf.pdf", xlab = expression(PM[2.5]~"(µg/m"^3*")"),
          ci_fill = TRUE, ci_border = FALSE)
 ```
 
-接收 `cox_run_rcs` 或 `cox_run_psp` 的结果。可调整曲线、CI 阴影与 CI 边线的颜色、线宽与透明度。
+接收 `cox_run_rcs`、`cox_run_psp`、`logit_run_rcs`、`clogit_run_rcs`、`lm_run_rcs` 的结果；y 轴标题与参照线（HR、OR 为 1，beta 为 0）自动确定。可调整曲线、CI 阴影与 CI 边线的颜色、线宽与透明度。
 
 ### 绘图通用参数
 

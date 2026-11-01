@@ -8,7 +8,7 @@ plot_crf(
   x,
   file,
   xlab = NULL,
-  ylab = "Hazard Ratio",
+  ylab = NULL,
   ylim = NULL,
   line_color = "black",
   line_width = 0.75,
@@ -27,16 +27,16 @@ plot_crf(
 )
 }
 \arguments{
-\item{x}{\code{cox_run_rcs} 或 \code{cox_run_psp} 的返回对象}
+\item{x}{\code{cox_run_rcs}、\code{cox_run_psp}、\code{logit_run_rcs}、\code{clogit_run_rcs} 或 \code{lm_run_rcs} 的返回对象}
 
 \item{file}{输出 PDF 路径（以 .pdf 结尾）}
 
 \item{xlab}{x 轴标题，默认为暴露变量名。可为字符（可含 µ、³ 等 Unicode 字符）或 plotmath 表达式，
 如 \code{expression(PM[2.5]~"(µg/m"^3*")")}；表达式中请勿使用 plotmath 希腊字母（会引入 Symbol 字体而无法通过字体校验）}
 
-\item{ylab}{y 轴标题，默认 "Hazard Ratio"}
+\item{ylab}{y 轴标题；NULL 时按效应量自动确定："Hazard Ratio"、"Odds Ratio" 或 "Beta"}
 
-\item{ylim}{y 轴范围（长度 2）；默认 NULL 时包含全部 CI 与 1，并两端各扩展 5\%。超出范围的部分在面板内裁剪}
+\item{ylim}{y 轴范围（长度 2）；默认 NULL 时包含全部 CI 与无效值，并两端各扩展 5\%。超出范围的部分在面板内裁剪}
 
 \item{line_color, line_width, line_alpha}{曲线颜色、线宽（pt）与透明度（0–1）}
 
@@ -58,8 +58,9 @@ plot_crf(
 不可见地返回 \code{myepi_forest} 对象（\code{summary}、\code{file}）；用 \code{print()} 查看
 }
 \description{
-直接读取 \code{cox_run_rcs} 或 \code{cox_run_psp} 的曲线数据（x、hr、ll、ul），按固定样式输出单页矢量 PDF：
-仅左轴与底轴、刻度朝外、无网格；坐标轴两端各留 5\% 空白；HR = 1 处为贯穿面板的灰色虚线；
+直接读取 \code{cox_run_rcs}、\code{cox_run_psp}、\code{logit_run_rcs}、\code{clogit_run_rcs} 或 \code{lm_run_rcs} 的
+曲线数据（x 与 hr / or / beta、ll、ul），按固定样式输出单页矢量 PDF：
+仅左轴与底轴、刻度朝外、无网格；坐标轴两端各留 5\% 空白；无效值处（HR、OR 为 1，beta 为 0）为贯穿面板的灰色虚线；
 曲线为实线，CI 为阴影（可选）及上下边线（可选，两端不封口）。
 字体嵌入、文本提取与线宽校验与 \code{plot_forest} 相同；任一校验失败不生成文件。
 }
