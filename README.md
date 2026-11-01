@@ -4,6 +4,20 @@
 
 反馈与需求：关注公众号 **epi solution** 后留言。
 
+![myepi 速查表](cheatsheets/cheatsheet_v0.1.0.png)
+
+## 功能一览
+
+| 分析 | Cox 回归（HR） | 逻辑回归（OR） | 条件逻辑回归（OR） | 线性回归（β） |
+|---|---|---|---|---|
+| 主效应 | `cox_run` | `logit_run` | `clogit_run` | `lm_run` |
+| 分位数 + 趋势 | `cox_run_q` | `logit_run_q` | `clogit_run_q` | `lm_run_q` |
+| 亚组 + 交互 | `cox_run_sub` | `logit_run_sub` | `clogit_run_sub` | `lm_run_sub` |
+| RCS 样条 | `cox_run_rcs` | `logit_run_rcs` | `clogit_run_rcs` | `lm_run_rcs` |
+| 惩罚样条 | `cox_run_psp` | — | — | — |
+
+此外：`count_na`（缺失概览）、`cox_het`（亚组异质性，接收任一 `*_run_sub` 结果）、`plot_forest` / `plot_forest_landscape`（森林图，接收主效应、分位数、亚组结果）、`plot_crf`（剂量反应曲线，接收样条结果）。
+
 ## 安装
 
 ```r
@@ -128,11 +142,30 @@ res$result   # 各水平的人数、结局均值与标准差、beta、95% CI、P
 
 ```r
 res <- logit_run_sub(df, group_var = "sex", outcome = "case", mainvar = "exposure", covars = "age")
-res <- clogit_run_sub(df, group_var = "sex", outcome = "case", mainvar = "exposure", match_id = "set_id")
+res <- clogit_run_sub(df, group_var = "education", outcome = "case", mainvar = "exposure", match_id = "set_id")
 res <- lm_run_sub(df, group_var = "sex", outcome = "sbp", mainvar = "exposure", covars = "age")
+res$result        # 各亚组结果（列同对应的 *_run），含 P_interaction
+res$interaction   # 交互检验：方法、自由度、统计量、P
 ```
 
-用法同 `cox_run_sub`。交互检验：模型方差下逻辑回归与条件逻辑回归为似然比检验、线性回归为嵌套模型 F 检验；`robust = TRUE` 时为 Wald 检验。条件逻辑回归的分组变量须在匹配组内恒定（如匹配因素），交互模型不纳入其主效应；分组变量会拆分匹配组时直接报错，此时请改用匹配因素分组，或用 `logit_run_sub` 并在 `covars` 中校正匹配因素。
+参数与 `cox_run_sub` 相同（`group_na`、`interaction`、`plot_shape`、`robust`、`extra_vars`），不含随访时间参数；含分组变量的协变量项在亚组模型中自动剔除。
+
+| 模型 | 交互检验（模型方差） | 交互检验（`robust = TRUE`） |
+|---|---|---|
+| `logit_run_sub` | 似然比检验 | Wald χ² |
+| `clogit_run_sub` | 似然比检验 | Wald χ² |
+| `lm_run_sub` | 嵌套模型 F 检验 | Wald F |
+
+条件逻辑回归的分组变量须在匹配组内恒定（如匹配因素），交互模型不纳入其主效应（已被条件似然吸收）；分组变量会拆分匹配组时直接报错，此时请改用匹配因素分组，或改用 `logit_run_sub` 并在 `covars` 中校正匹配因素。
+
+结果可直接流转：
+
+```r
+s_sex <- logit_run_sub(df, group_var = "sex", outcome = "case", mainvar = "exposure")
+s_age <- logit_run_sub(df, group_var = "age_group", outcome = "case", mainvar = "exposure")
+cox_het(s_sex)                                          # 异质性（补充指标）
+plot_forest(list(s_sex, s_age), file = "subgroup.pdf")  # 森林图：OR 轴，标题行为 P for interaction
+```
 
 ### logit_run_q / clogit_run_q / lm_run_q：回归模型的分位数分组
 
@@ -140,9 +173,12 @@ res <- lm_run_sub(df, group_var = "sex", outcome = "sbp", mainvar = "exposure", 
 res <- logit_run_q(df, outcome = "case", mainvar = "bmi", q = 4, covars = c("age", "sex"), trend = TRUE)
 res <- clogit_run_q(df, outcome = "case", mainvar = "bmi", match_id = "set_id", q = 4)
 res <- lm_run_q(df, outcome = "sbp", mainvar = "bmi", q = c(10, 18.5, 24, 28, 60))
+res$result   # 各组（Q1 为参照）的计数/均值与效应量；趋势检验时首行含 beta_trend、P_trend
+res$breaks   # 实际断点
+res$trend    # 趋势检验：得分方法、beta、se、P
 ```
 
-用法同 `cox_run_q`（不含 `idL`）。
+参数与 `cox_run_q` 相同（`q`、`trend`、`trend_method`、`robust`），不含随访时间与 `idL`；`logit_run_q` 另有 `ci_method`。分位点在分析样本中计算，重复时自动合并并警告，运行时报告各组样本量。结果可直接交给 `plot_forest()`：参照组显示为 `1.00 (Ref)`（线性回归为 `0.00 (Ref)`），标题行为 P for trend。
 
 ### logit_run_rcs / clogit_run_rcs / lm_run_rcs：回归模型的限制性立方样条
 
