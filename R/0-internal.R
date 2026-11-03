@@ -280,6 +280,11 @@ print.myepi_result <- function(x, digits = 2, ...) {
     cat("\n")
   }
   .print_table(x$result, digits)
+  if (is.data.frame(x$additive)) {
+    cat("\n加性交互（AP 与贡献为比例）:\n")
+    .print_table(x$additive[x$additive$primary, setdiff(names(x$additive), c("level_a", "level_b", "primary")), drop = FALSE], digits)
+    if (any(!x$additive$primary)) cat("（其他组合见 $additive；分层效应见 $stratified）\n")
+  }
   invisible(x)
 }
 
