@@ -1,14 +1,16 @@
 Package: myepi
 Type: Package
 Title: Regression Workflows and Figures for Epidemiological Studies
-Version: 0.1.0
+Version: 0.2.0
 Author: Yuanlin Mou [aut, cre]
 Maintainer: Yuanlin Mou <your_email@example.com>
 Description: Streamlined analysis workflows for cohort and case-control
     studies: missing-data profiling; Cox, logistic, conditional logistic and
     linear regression with complete-case reporting and per-level descriptive
     statistics; quantile grouping with trend tests; subgroup analyses with
-    interaction tests and heterogeneity statistics; restricted cubic spline
+    interaction tests and heterogeneity statistics; additive interaction
+    (RERI, AP, synergy index) with the contributions of the two factors;
+    restricted cubic spline
     and penalized spline dose-response curves; and publication-grade vector
     forest plots and dose-response curves with embedded fonts. Model fitting
     and inference rely on 'survival', 'stats', 'rms' and 'metafor'.
