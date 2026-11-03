@@ -1,10 +1,10 @@
 # myepi
 
-队列与病例对照研究常用分析：缺失概览、Cox 回归（主效应、分位数、亚组与交互、异质性）、非线性剂量反应（RCS / PSP）、逻辑回归、条件逻辑回归与线性回归，以及发表级森林图与剂量反应曲线图。
+队列与病例对照研究常用分析：缺失概览、Cox 回归（主效应、分位数、亚组与交互、异质性）、非线性剂量反应（RCS / PSP）、加性交互与两因素贡献、逻辑回归、条件逻辑回归与线性回归，以及发表级森林图与剂量反应曲线图。
 
 反馈与需求：关注公众号 **epi solution** 后留言。
 
-![myepi 速查表](cheatsheets/cheatsheet_v0.1.0.png)
+![myepi 速查表](cheatsheets/cheatsheet_v0.2.0.png)
 
 ## 功能一览
 
@@ -15,6 +15,7 @@
 | 亚组 + 交互 | `cox_run_sub` | `logit_run_sub` | `clogit_run_sub` | `lm_run_sub` |
 | RCS 样条 | `cox_run_rcs` | `logit_run_rcs` | `clogit_run_rcs` | `lm_run_rcs` |
 | 惩罚样条 | `cox_run_psp` | — | — | — |
+| 加性交互 | `cox_run_add` | `logit_run_add` | `clogit_run_add` | — |
 
 此外：`count_na`（缺失概览）、`cox_het`（亚组异质性，接收任一 `*_run_sub` 结果）、`plot_forest` / `plot_forest_landscape`（森林图，接收主效应、分位数、亚组结果）、`plot_crf`（剂量反应曲线，接收样条结果）。
 
@@ -191,6 +192,22 @@ res$tests    # 总体关联与非线性检验
 ```
 
 节点、参照值与预测范围的参数同 `cox_run_rcs`。`logit_run_rcs` 与 `lm_run_rcs` 基于 `rms::lrm` / `rms::ols` + `Predict()` + `anova()`（线性回归为 t 分布 CI 与 F 检验）；`clogit_run_rcs` 基于 `survival::clogit` 与相同的样条基函数，对比与检验的定义同 `Predict()` / `anova()`。匹配变量在匹配组内无变异，不能作为 `clogit_run_rcs` 的暴露。
+
+### cox_run_add / logit_run_add / clogit_run_add：加性交互与两因素贡献
+
+```r
+res <- cox_run_add(df, timediff = "time", event = "status", var_a = "prs", var_b = "lifestyle",
+                   risk_b = "lower", covars = c("age", "sex"))     # 生活方式评分越高越健康
+res$result       # 联合效应表：各组合相对共同参照（两者均低风险）的 HR，可直接用于 plot_forest
+res$additive     # 每个非参照组合的 RERI、AP、S、两因素贡献（prop_a、prop_b、prop_interaction）、乘法交互
+res$stratified   # 分层效应：一个因素在另一因素各水平内的效应
+```
+
+- 分组：连续变量用 `cut_*`（界值）或 `q_*`（分位数，默认三分位，在分析样本中计算）；取值不超过 5 个时按原值分组；分类变量用 `levels_*` 给出低 → 高风险顺序。
+- 风险方向：`risk_* = "higher"`（数值越大风险越高，默认）或 `"lower"`，分组后自动排序，使第一个水平为低风险参照；单独暴露组效应 < 1 时警告（Knol 等，2011）。
+- 指标：RERI = RR11 − RR10 − RR01 + 1，AP = RERI / RR11，S = (RR11 − 1) / [(RR10 − 1) + (RR01 − 1)]；两因素贡献为 (RR10 − 1)、(RR01 − 1) 与 RERI 分别占 (RR11 − 1) 的比例，合计为 1（VanderWeele & Tchetgen Tchetgen，2014）。多水平因素对每个组合分别计算，`contrast = c(i, j)` 指定主要报告的组合（默认均为最高风险水平）。
+- CI：`ci_method = "delta"`（默认，与所选方差一致；S 与乘法交互在对数尺度）或 `"boot"`（百分位数，`B = 999`，`seed` 可复现；重抽样单位为 `idL` 个体、`cluster()` 聚类或匹配组，分组界值固定为原样本）。
+- 逻辑回归结局比例 > 10% 时警告（OR 偏离 RR）；条件逻辑回归中两个因素都须在匹配组内有变异。
 
 ### plot_forest：森林图（表格式）
 

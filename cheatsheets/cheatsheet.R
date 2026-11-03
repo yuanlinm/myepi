@@ -1,4 +1,4 @@
-# 生成 README 中的速查表：Rscript cheatsheets/cheatsheet.R cheatsheets/cheatsheet_v0.1.0.png（需 WenQuanYi Zen Hei 字体）
+# 生成 README 中的速查表：Rscript cheatsheets/cheatsheet.R cheatsheets/cheatsheet_v0.2.0.png（需 WenQuanYi Zen Hei 字体）
 # myepi 0.1.0 速查表（RStudio cheatsheet 风格）
 args <- commandArgs(trailingOnly = TRUE)
 out <- args[1]
@@ -43,7 +43,7 @@ grid.rect(x = unit(0, "native"), y = unit(H - 0.95, "native"), width = unit(W, "
           just = c("left", "bottom"), gp = gpar(fill = INK, col = NA))
 txt("myepi 速查表", 0.35, H - 0.45, 26, "white", "bold")
 txt("队列与病例对照研究：回归分析流程与发表级图形", 3.15, H - 0.47, 14, "#D7DEE5")
-txt("v0.1.0", W - 0.35, H - 0.36, 14, "white", "bold", c("right", "centre"))
+txt("v0.2.0", W - 0.35, H - 0.36, 14, "white", "bold", c("right", "centre"))
 txt("github.com/yuanlinm/myepi", W - 0.35, H - 0.66, 10.5, "#D7DEE5", just = c("right", "centre"))
 
 # ---- 1 数据检查与通用约定 ----
@@ -69,13 +69,14 @@ for (b in bul) { txt(paste0("•  ", b), x1 + 0.2, yy, 9.6); yy <- yy - 0.265 }
 x2 <- 4.8; y2 <- 4.45; w2 <- 10.9; h2 <- 4.45
 section(x2, y2, w2, h2, "2  回归建模：模型 × 分析", "model")
 cols <- c("Cox 回归（HR）", "逻辑回归（OR）", "条件逻辑回归（OR）", "线性回归（β）")
-rows <- c("主效应", "分位数 + 趋势", "亚组 + 交互", "RCS 样条", "惩罚样条")
+rows <- c("主效应", "分位数 + 趋势", "亚组 + 交互", "RCS 样条", "惩罚样条", "加性交互")
 fns <- rbind(c("cox_run", "logit_run", "clogit_run", "lm_run"),
              c("cox_run_q", "logit_run_q", "clogit_run_q", "lm_run_q"),
              c("cox_run_sub", "logit_run_sub", "clogit_run_sub", "lm_run_sub"),
              c("cox_run_rcs", "logit_run_rcs", "clogit_run_rcs", "lm_run_rcs"),
-             c("cox_run_psp", "—", "—", "—"))
-tx <- x2 + 0.2; ty <- y2 + h2 - 0.7; lab_w <- 1.55; cw <- 1.95; rh <- 0.38
+             c("cox_run_psp", "—", "—", "—"),
+             c("cox_run_add", "logit_run_add", "clogit_run_add", "—"))
+tx <- x2 + 0.2; ty <- y2 + h2 - 0.7; lab_w <- 1.55; cw <- 1.95; rh <- 0.34
 for (j in seq_along(cols)) {
   box(tx + lab_w + (j - 1) * cw + 0.03, ty - 0.17, cw - 0.06, 0.34, fill = COL[["model"]], col = NA, r = 0.05)
   txt(cols[j], tx + lab_w + (j - 0.5) * cw, ty, 10, "white", "bold", c("centre", "centre"))
@@ -89,13 +90,14 @@ for (i in seq_along(rows)) {
     code(fns[i, j], tx + lab_w + (j - 0.5) * cw, yc, 10, if (fns[i, j] == "—") "#9AA5AE" else INK, c("centre", "centre"))
   }
 }
-ny <- ty - 6 * rh - 0.12
+ny <- ty - 7 * rh - 0.08
 notes <- c(
   "分位数：q = 4 等分位或自定义断点；trend = TRUE 给出 P for trend（组内中位数或序号得分）",
   "亚组：P_interaction —— 模型方差下 LRT（线性回归为 F 检验），robust = TRUE 时为 Wald；clogit 须按匹配因素分组",
   "RCS：nk = 3（Harrell 分位数）/ knots / knot_probs；参照值默认中位数；rms::Predict + anova，500 点曲线",
-  "惩罚样条：survival::pspline，df（0 为 AIC）/ theta / nterm；曲线同 termplot()；线性与非线性检验")
-for (n in notes) { txt(paste0("•  ", n), tx, ny, 9.4, GREY); ny <- ny - 0.27 }
+  "惩罚样条：survival::pspline，df（0 为 AIC）/ theta / nterm；曲线同 termplot()；线性与非线性检验",
+  "加性交互：联合分组（risk_* 定方向）→ RERI、AP、S 与两因素贡献（A、B、交互，合计 100%）；delta 法或 bootstrap")
+for (n in notes) { txt(paste0("•  ", n), tx, ny, 9.2, GREY); ny <- ny - 0.235 }
 
 # ---- 3 异质性 ----
 x3 <- 0.3; y3 <- 0.35; w3 <- 3.4; h3 <- 4.0
@@ -188,7 +190,7 @@ node <- function(label, x, y, w, key, size = 9.2) {
 cx <- x5 + w5 / 2
 ax <- x5 + 1.45; bxn <- x5 + 3.55
 node("count_na", cx, y5 + 3.2, 1.5, "prep")
-node("*_run · *_run_q · *_run_sub", ax, y5 + 2.3, 2.6, "model", 8.4)
+node("*_run · *_q · *_sub · *_add", ax, y5 + 2.3, 2.6, "model", 8.4)
 node("*_rcs · *_psp", bxn, y5 + 2.3, 1.4, "model", 8.4)
 node("cox_het", x5 + 0.8, y5 + 1.35, 1.1, "het")
 node("plot_forest(_landscape)", x5 + 1.5, y5 + 0.5, 2.45, "plot", 8.6)
